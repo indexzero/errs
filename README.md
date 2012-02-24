@@ -22,7 +22,7 @@ You should know by now that [a String is not an Error][0]. Unfortunately the `Er
 
 Rest your fingers, `errs` is here to help. The following is equivalent to the above:
 
-```
+``` js
   var errs = require('errs');
   
   throw errs.create({
@@ -85,7 +85,7 @@ Node.js handles asynchronous IO through the elegant `EventEmitter` API. In many 
 
 `errs` it presents a common API for both emitting `error` events and invoking continuations (i.e. callbacks) with errors;
 
-```
+``` js
   function importantFeature(callback) {
     return someAsyncFn(function (err) {
       if (err) {
@@ -108,13 +108,15 @@ The `errs` modules exposes some simple utility methods:
 ## Installation
 
 ### Installing npm (node package manager)
-```
-  curl http://npmjs.org/install.sh | sh
+
+``` bash
+  $ curl http://npmjs.org/install.sh | sh
 ```
 
 ### Installing errs
-```
-  [sudo] npm install errs
+
+``` bash
+  $ [sudo] npm install errs
 ```
 
 ## Tests
