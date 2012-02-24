@@ -1,4 +1,4 @@
-# errs 
+# errs [![Build Status](https://secure.travis-ci.org/flatiron/errs.png)](http://travis-ci.org/flatiron/errs)
 
 Simple error creation and passing utilities focused on:
 
