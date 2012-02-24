@@ -5,7 +5,7 @@
  * MIT LICENSE
  *
  */
- 
+
 var util = require('util');
 
 var fixtures = exports;
@@ -15,3 +15,9 @@ fixtures.NamedError = function NamedError() {
 };
 
 util.inherits(fixtures.NamedError, Error);
+
+fixtures.AnError = function AnError() {
+  this.named = true;
+};
+
+util.inherits(fixtures.AnError, Error);
