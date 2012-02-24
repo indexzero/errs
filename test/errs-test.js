@@ -33,6 +33,10 @@ vows.describe('errs').addBatch({
       "should register the prototype": function () {
         errs.register('named', fixtures.NamedError);
         assert.equal(errs.registered['named'], fixtures.NamedError);
+      },
+      "should register an error without providing its name": function () {
+        errs.register(fixtures.AnError);
+        assert.equal(errs.registered['anerror'], fixtures.AnError);
       }
     },
     "the create() method with": {
