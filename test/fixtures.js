@@ -10,8 +10,7 @@ var util = require('util');
 
 var fixtures = exports;
 
-fixtures.NamedError = function (msg) {
-  this.message = msg;
+fixtures.NamedError = function NamedError() {
   this.named = true;
 };
 
