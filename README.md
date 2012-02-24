@@ -34,34 +34,60 @@ Rest your fingers, `errs` is here to help. The following is equivalent to the ab
 ```
 
 <a name="reusing-types" />
-## Reusing Error Types
+## Reusing Custom Error Types
 
-`errs` also an [inversion of control][1] interface for easily reusing custom error types across your application:
+`errs` also exposes an [inversion of control][1] interface for easily reusing custom error types across your application. Custom Error Types registered with `errs` will transparently invoke `Error` constructor and `Error.captureStackTrace` to attach transparent stack traces:
 
 ``` js
-  //
-  // file-a.js: Create and register your error type.
-  //
+  /*
+   * file-a.js: Create and register your error type.
+   *
+   */
+   
   var util = require('util'),
       errs = require('errs');
 
-  var MyError = function (msg) {
-    Error.call(this, msg);
-    this.isCustom = true;
+  function MyError() {
+    this.message = 'This is my error; I made it myself. It has a transparent stack trace.';
   }
-  
+
+  //
+  // Alternatively `MyError.prototype.__proto__ = Error;`
+  //
   util.inherits(MyError, Error);
+
+  //
+  // Register the error type
+  //
   errs.register('myerror', MyError);
-  
-  //
-  // file-b.js: Use your error type.
-  //
+
+
+
+  /*
+   * file-b.js: Use your error type.
+   *
+   */
+   
   var errs = require('errs');
   
-  throw errs.create('myerror', {
-    and: 'you can',
-    add: 'custom properties too.'
-  });
+  console.log(
+    errs.create('myerror')
+      .stack
+      .split('\n')
+  );
+```
+
+The output from the two files above is shown below. Notice how it contains no references to `errs.js`:
+
+```
+[ 'MyError: This is my error; I made it myself. It has a transparent stack trace.',
+  '    at Object.<anonymous> (/file-b.js:19:8)',
+  '    at Module._compile (module.js:441:26)',
+  '    at Object..js (module.js:459:10)',
+  '    at Module.load (module.js:348:31)',
+  '    at Function._load (module.js:308:12)',
+  '    at Array.0 (module.js:479:10)',
+  '    at EventEmitter._tickCallback (node.js:192:40)' ]
 ```
 
 <a name="optional-invocation" />
