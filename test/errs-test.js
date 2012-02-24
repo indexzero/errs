@@ -65,7 +65,7 @@ vows.describe('errs').addBatch({
         topic: function () {
           var err = this.err = errs.create('Some emitted error'),
               emitter = errs.handle(err);
-              
+
           emitter.once('error', this.callback.bind(this, null))
         },
         "should invoke the callback with the error": function (_, err) {
