@@ -25,7 +25,7 @@ var opts = [{
   should: true,
   have: 4,
   properties: 'yes'
-}]
+}];
 
 vows.describe('errs').addBatch({
   "Using errs module": {
@@ -69,8 +69,8 @@ vows.describe('errs').addBatch({
         topic: function () {
           var err = this.err = errs.create('Some emitted error'),
               emitter = errs.handle(err);
-
-          emitter.once('error', this.callback.bind(this, null))
+              
+          emitter.once('error', this.callback.bind(this, null));
         },
         "should invoke the callback with the error": function (_, err) {
           assert.equal(err, this.err);
@@ -84,6 +84,32 @@ vows.describe('errs').addBatch({
       "should unregister the prototype": function () {
         errs.unregister('named');
         assert.isTrue(!errs.registered['named']);
+      }
+    }
+  }
+}).addBatch({
+  "Using errs module": {
+    "the merge() method": {
+      "should preserve custom properties": function () {
+        var err = new Error('Msg!');
+        err.foo = "bar";
+        err = errs.merge(err, {message: "Override!", ns: "test"});
+        assert.equal(err.foo, "bar");
+      },
+      "should have a stack trace": function () {
+        var err = new Error('Msg!');
+        err = errs.merge(err, {message: "Override!", ns: "test"});
+        assert.isTrue(Array.isArray(err.stacktrace));
+      },
+      "should preserve message specified in create": function () {
+        var err = new Error('Msg!');
+        err = errs.merge(err, {message: "Override!", ns: "test"});
+        assert.equal(err.message, "Override!");
+      },
+      "should preserve properties specified": function () {
+        var err = new Error('Msg!');
+        err = errs.merge(err, {message: "Override!", ns: "test"});
+        assert.equal(err.ns, "test");
       }
     }
   }
