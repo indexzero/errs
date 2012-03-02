@@ -4,6 +4,7 @@ Simple error creation and passing utilities focused on:
 
 * [Creating Errors](#creating-errors)
 * [Reusing Error Types](#reusing-types)
+* [Merging with Existing Errors](#merging-errors)
 * [Optional Callback Invocation](#optional-invocation)
 
 <a name="creating-errors" />
@@ -88,6 +89,30 @@ The output from the two files above is shown below. Notice how it contains no re
   '    at Function._load (module.js:308:12)',
   '    at Array.0 (module.js:479:10)',
   '    at EventEmitter._tickCallback (node.js:192:40)' ]
+```
+
+<a name="merging-errors" />
+## Merging with Existing Errors
+
+When working with errors you catch or are returned in a callback you can extend those errors with properties by using the `errs.merge` method. This will also create a human readable error message and stack-trace:
+
+``` js
+process.on('uncaughtException', function(err) {
+  console.log(errs.merge(err, {namespace: 'uncaughtException'}));
+});
+
+var file = fs.createReadStream('FileDoesNotExist.here');
+```
+
+``` js
+{ [Error: Unspecified error]
+  name: 'Error',
+  namespace: 'uncaughtException',
+  errno: 34,
+  code: 'ENOENT',
+  path: 'FileDoesNotExist.here',
+  description: 'ENOENT, no such file or directory \'FileDoesNotExist.here\'',
+  stacktrace: [ 'Error: ENOENT, no such file or directory \'FileDoesNotExist.here\'' ] }
 ```
 
 <a name="optional-invocation" />
