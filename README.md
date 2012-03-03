@@ -155,6 +155,7 @@ The `errs` modules exposes some simple utility methods:
 * `.register(type, proto)`: Registers the specified `proto` to `type` for future calls to `errors.create(type, opts)`.
 * `.unregister(type)`: Unregisters the specified `type` for future calls to `errors.create(type, opts)`.
 * `.handle(err, callback)`: Attempts to instantiate the given `error`. If the `error` is already a properly formed `error` object (with a `stack` property) it will not be modified.
+* `.merge(err, type, opts)`: Merges an existing error with a new error instance for with the specified `type` and `opts`.
 
 ## Installation
 
