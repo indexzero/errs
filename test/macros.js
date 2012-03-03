@@ -88,4 +88,4 @@ macros.create.registered = function (type, proto, obj) {
       });
     }
   };
-}
+};
