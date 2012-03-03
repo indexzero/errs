@@ -7,6 +7,7 @@
  */
  
 var assert = require('assert'),
+    events = require('events'),
     vows = require('vows'),
     errs = require('../lib/errs'),
     fixtures = require('./fixtures'),
@@ -65,6 +66,38 @@ vows.describe('errs').addBatch({
           assert.equal(err, this.err);
         }
       },
+      "with an EventEmitter (i.e. stream)": {
+        topic: function () {
+          var err = this.err = errs.create('Some emitted error'),
+              stream = new events.EventEmitter();
+              
+          stream.once('error', this.callback.bind(this, null));
+          errs.handle(err, stream);
+        },
+        "should emit the `error` event": function (_, err) {
+          assert.equal(err, this.err);
+        }
+      },
+      "with a callback and an EventEmitter": {
+        topic: function () {
+          var err = this.err = errs.create('Some emitted error'),
+              stream = new events.EventEmitter(),
+              invoked = 0,
+              that = this;
+          
+          function onError(err) {
+            if (++invoked === 2) {
+              that.callback.call(that, null, err);
+            }
+          }
+          
+          stream.once('error', onError);
+          errs.handle(err, onError, stream);
+        },
+        "should emit the `error` event": function (_, err) {
+          assert.equal(err, this.err);
+        }
+      },
       "with no callback": {
         topic: function () {
           var err = this.err = errs.create('Some emitted error'),
@@ -72,7 +105,7 @@ vows.describe('errs').addBatch({
               
           emitter.once('error', this.callback.bind(this, null));
         },
-        "should invoke the callback with the error": function (_, err) {
+        "should emit the `error` event": function (_, err) {
           assert.equal(err, this.err);
         }
       }

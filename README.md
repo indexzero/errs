@@ -6,6 +6,7 @@ Simple error creation and passing utilities focused on:
 * [Reusing Error Types](#reusing-types)
 * [Merging with Existing Errors](#merging-errors)
 * [Optional Callback Invocation](#optional-invocation)
+* [Piping Error Events](#piping-errors)
 
 <a name="creating-errors" />
 ## Creating Errors
@@ -134,7 +135,7 @@ Node.js handles asynchronous IO through the elegant `EventEmitter` API. In many 
   }
 ```
 
-`errs` it presents a common API for both emitting `error` events and invoking continuations (i.e. callbacks) with errors;
+`errs` it presents a common API for both emitting `error` events and invoking continuations (i.e. callbacks) with errors. If a `callback` is supplied to `errs.handle()` it will be invoked with the error. It no `callback` is provided then an `EventEmitter` is returned which emits an `error` event on the next tick:
 
 ``` js
   function importantFeature(callback) {
@@ -146,7 +147,74 @@ Node.js handles asynchronous IO through the elegant `EventEmitter` API. In many 
   }
 ```
 
-If a `callback` is supplied to `errs.handle()` it will be invoked with the error. It no `callback` is provided then an `EventEmitter` is returned which emits an `error` event on the next tick.
+<a name="piping-errors" />
+## Piping Errors
+
+Often when working with streams (especially when buffering for whatever reason), you may have already returned an `EventEmitter` or `Stream` instance by the time an error is handled.
+
+``` js
+  function pipeSomething(callback) {
+    //
+    // You have a stream (e.g. http.ResponseStream) and you 
+    // have an optional `callback`.
+    //
+    var stream = new require('stream').Stream;
+
+    //
+    // You need to do something async which may respond with an
+    // error
+    //
+    getAnotherStream(function (err, source) {
+      if (err) {
+        if (callback)
+          callback(err);
+        }
+        
+        stream.emit('error', err);
+        return;
+      }
+      
+      source.pipe(stream);
+    })
+
+    return stream;
+  }
+```
+
+You may pass either a `function` or `EventEmitter` instance to `errs.handle`.
+
+``` js
+  function pipeSomething(callback) {
+    //
+    // You have a stream (e.g. http.ResponseStream) and you 
+    // have an optional `callback`.
+    //
+    var stream = new require('stream').Stream;
+
+    //
+    // You need to do something async which may respond with an
+    // error
+    //
+    getAnotherStream(function (err, source) {
+      if (err) {
+        //
+        // Invoke the callback if it exists otherwise the stream.
+        //
+        return errs.handle(err, callback || stream);
+      }
+      
+      source.pipe(stream);
+    })
+
+    return stream;
+  }
+```
+
+If you wish to invoke both a `callback` function and an `error` event simply pass both: 
+
+``` js
+  errs.handle(err, callback, stream);
+``` 
 
 ## Methods
 The `errs` modules exposes some simple utility methods:
