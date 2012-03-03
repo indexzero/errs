@@ -1,7 +1,7 @@
 {
   "name": "errs",
   "description": "Simple error creation and passing utilities",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "author": "Nodejitsu <info@nodejitsu.com>",
   "contributors": [
     { "name": "Charlie Robbins", "email": "charlie@nodejitsu.com" },
