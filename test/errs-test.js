@@ -131,17 +131,17 @@ vows.describe('errs').addBatch({
       },
       "should have a stack trace": function () {
         var err = new Error('Msg!');
-        err = errs.merge(err, {message: "Override!", ns: "test"});
+        err = errs.merge(err, {});
         assert.isTrue(Array.isArray(err.stacktrace));
       },
       "should preserve message specified in create": function () {
         var err = new Error('Msg!');
-        err = errs.merge(err, {message: "Override!", ns: "test"});
+        err = errs.merge(err, {message: "Override!"});
         assert.equal(err.message, "Override!");
       },
       "should preserve properties specified": function () {
         var err = new Error('Msg!');
-        err = errs.merge(err, {message: "Override!", ns: "test"});
+        err = errs.merge(err, {ns: "test"});
         assert.equal(err.ns, "test");
       }
     }
