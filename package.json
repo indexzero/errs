@@ -2,20 +2,28 @@
   "name": "errs",
   "description": "Simple error creation and passing utilities",
   "version": "0.2.1",
-  "author": "Nodejitsu <info@nodejitsu.com>",
-  "contributors": [
-    { "name": "Charlie Robbins", "email": "charlie@nodejitsu.com" },
-    { "name": "Nuno Job", "email": "nuno@nodejitsu.com" }
+  "author": "Nodejitsu Inc. <info@nodejitsu.com>",
+  "maintainers": [
+    "indexzero <charlie@nodejitsu.com>",
+    "dscape <nuno@nodejitsu.com>"
   ],
   "repository": {
     "type": "git",
-    "url": "http://github.com/flatiron/errs.git" 
+    "url": "http://github.com/flatiron/errs.git"
   },
-  "keywords": ["errors", "utilities"],
+  "keywords": [
+    "errors",
+    "utilities"
+  ],
   "devDependencies": {
     "vows": "0.6.x"
   },
   "main": "./lib/errs",
-  "scripts": { "test": "vows test/*-test.js --spec" },
-  "engines": { "node": ">= 0.4.0" }
+  "scripts": {
+    "test": "vows test/*-test.js --spec"
+  },
+  "engines": {
+    "node": ">= 0.4.0"
+  }
 }
+
