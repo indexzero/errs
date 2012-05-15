@@ -146,4 +146,18 @@ vows.describe('errs').addBatch({
       }
     }
   }
+}).addBatch({
+  "Using errs module": {
+    "Error.prototype.toJSON": {
+      "should exist": function () {
+        assert.isFunction(Error.prototype.toJSON);
+        
+        var json = (new Error('Testing 12345')).toJSON();
+        
+        ['message', 'stack', 'arguments', 'type'].forEach(function (prop) {
+          assert.isObject(Object.getOwnPropertyDescriptor(json, prop));
+        })
+      }
+    }
+  }
 }).export(module);
