@@ -45,7 +45,13 @@ vows.describe('errs').addBatch({
       "no parameters": macros.create.string('An error as a string'),
       "an object": {
         "that has no message": macros.create.object(opts[0]),
-        "that has a message": macros.create.object(opts[1])
+        "that has a message": macros.create.object(opts[1]),
+        "that has a name": {
+          topic : errs.create({name: 'OverflowError'}),
+          "should respect that name in the stack trace" : function (err) {
+            assert.match(err.stack, /^OverflowError/);
+          },
+        }
       },
       "an error": macros.create.err(new Error('An instance of an error')),
       "a function": macros.create.fn(function () {
