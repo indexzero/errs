@@ -149,6 +149,30 @@ vows.describe('errs').addBatch({
         var err = new Error('Msg!');
         err = errs.merge(err, {ns: "test"});
         assert.equal(err.ns, "test");
+      },
+      "with a truthy value": function () {
+        var err = errs.merge(true, {
+          message: 'Override!',
+          ns: 'lolwut'
+        })
+        assert.equal(err.message, 'Override!');
+        assert.equal(err.ns, 'lolwut');
+      },
+      "with a truthy stack": function () {
+        var err = errs.merge({ stack: true } , {
+          message: 'Override!',
+          ns: 'lolwut'
+        })
+        assert.equal(err.message, 'Override!');
+        assert.equal(err.ns, 'lolwut');
+      },
+      "with an Array stack": function () {
+        var err = errs.merge({ stack: [] } , {
+          message: 'Override!',
+          ns: 'lolwut'
+        })
+        assert.equal(err.message, 'Override!');
+        assert.equal(err.ns, 'lolwut');
       }
     }
   }
