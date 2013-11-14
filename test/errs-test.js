@@ -187,6 +187,16 @@ vows.describe('errs').addBatch({
         ['message', 'stack', 'arguments', 'type'].forEach(function (prop) {
           assert.isObject(Object.getOwnPropertyDescriptor(json, prop));
         })
+      },
+      "should be writable": function () {
+        var orig = Error.prototype.toJSON;
+        Error.prototype.toJSON = function() {
+          return 'foo';
+        };
+        var json = (new Error('Testing 12345')).toJSON();
+
+        assert.equal(json, 'foo');
+        Error.prototype.toJSON = orig;
       }
     }
   }
