@@ -16,7 +16,7 @@
     "utilities"
   ],
   "devDependencies": {
-    "vows": "0.6.x"
+    "vows": "0.7.x"
   },
   "main": "./lib/errs",
   "scripts": {
