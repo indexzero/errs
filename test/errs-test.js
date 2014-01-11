@@ -5,7 +5,7 @@
  * MIT LICENSE
  *
  */
- 
+
 var assert = require('assert'),
     events = require('events'),
     vows = require('vows'),
@@ -76,7 +76,7 @@ vows.describe('errs').addBatch({
         topic: function () {
           var err = this.err = errs.create('Some emitted error'),
               stream = new events.EventEmitter();
-              
+
           stream.once('error', this.callback.bind(this, null));
           errs.handle(err, stream);
         },
@@ -90,13 +90,13 @@ vows.describe('errs').addBatch({
               stream = new events.EventEmitter(),
               invoked = 0,
               that = this;
-          
+
           function onError(err) {
             if (++invoked === 2) {
               that.callback.call(that, null, err);
             }
           }
-          
+
           stream.once('error', onError);
           errs.handle(err, onError, stream);
         },
@@ -108,7 +108,7 @@ vows.describe('errs').addBatch({
         topic: function () {
           var err = this.err = errs.create('Some emitted error'),
               emitter = errs.handle(err);
-              
+
           emitter.once('error', this.callback.bind(this, null));
         },
         "should emit the `error` event": function (_, err) {
@@ -129,6 +129,28 @@ vows.describe('errs').addBatch({
 }).addBatch({
   "Using errs module": {
     "the merge() method": {
+      "supports": {
+        "an undefined error": function () {
+          var err = errs.merge(undefined, { message: 'oh noes!' });
+          assert.equal(err.message, 'oh noes!')
+          assert.instanceOf(err, Error);
+        },
+        "a null error": function () {
+          var err = errs.merge(null, { message: 'oh noes!' });
+          assert.equal(err.message, 'oh noes!')
+          assert.instanceOf(err, Error);
+        },
+        "a false error": function () {
+          var err = errs.merge(false, { message: 'oh noes!' });
+          assert.equal(err.message, 'oh noes!')
+          assert.instanceOf(err, Error);
+        },
+        "a string error": function () {
+          var err = errs.merge('wat', { message: 'oh noes!' });
+          assert.equal(err.message, 'oh noes!');
+          assert.instanceOf(err, Error);
+        },
+      },
       "should preserve custom properties": function () {
         var err = new Error('Msg!');
         err.foo = "bar";
@@ -181,9 +203,9 @@ vows.describe('errs').addBatch({
     "Error.prototype.toJSON": {
       "should exist": function () {
         assert.isFunction(Error.prototype.toJSON);
-        
+
         var json = (new Error('Testing 12345')).toJSON();
-        
+
         ['message', 'stack', 'arguments', 'type'].forEach(function (prop) {
           assert.isObject(Object.getOwnPropertyDescriptor(json, prop));
         })
