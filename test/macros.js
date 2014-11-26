@@ -1,11 +1,11 @@
 /*
  * macros.js: Test macros for the `errs` module.
  *
- * (C) 2012, Nodejitsu Inc.
+ * (C) 2012, Charlie Robbins, Nuno Job, and the Contributors.
  * MIT LICENSE
  *
  */
- 
+
 var assert = require('assert'),
     errs = require('../lib/errs');
 
@@ -60,7 +60,7 @@ macros.create.err = function (inst) {
 
 macros.create.fn = function (fn) {
   var obj = fn();
-  
+
   return {
     topic: errs.create(fn),
     "should create an error with the specified properties": function (err) {
