@@ -11,14 +11,14 @@ Simple error creation and passing utilities focused on:
 <a name="creating-errors" />
 ## Creating Errors
 
-You should know by now that [a String is not an Error][0]. Unfortunately the `Error` constructor in Javascript isn't all that convenient either. How often do you find yourself in this situation? 
+You should know by now that [a String is not an Error][0]. Unfortunately the `Error` constructor in Javascript isn't all that convenient either. How often do you find yourself in this situation?
 
 ``` js
   var err = new Error('This is an error. There are many like it.');
   err.someProperty = 'more syntax';
   err.someOtherProperty = 'it wont stop.';
   err.notEven = 'for the mayor';
-  
+
   throw err;
 ```
 
@@ -26,7 +26,7 @@ Rest your fingers, `errs` is here to help. The following is equivalent to the ab
 
 ``` js
   var errs = require('errs');
-  
+
   throw errs.create({
     message: 'This is an error. There are many like it.',
     someProperty: 'more syntax',
@@ -45,7 +45,7 @@ Rest your fingers, `errs` is here to help. The following is equivalent to the ab
    * file-a.js: Create and register your error type.
    *
    */
-   
+
   var util = require('util'),
       errs = require('errs');
 
@@ -69,9 +69,9 @@ Rest your fingers, `errs` is here to help. The following is equivalent to the ab
    * file-b.js: Use your error type.
    *
    */
-   
+
   var errs = require('errs');
-  
+
   console.log(
     errs.create('myerror')
       .stack
@@ -128,7 +128,7 @@ Node.js handles asynchronous IO through the elegant `EventEmitter` API. In many 
         if (callback) {
           return callback(err);
         }
-        
+
         throw err;
       }
     });
@@ -155,7 +155,7 @@ Often when working with streams (especially when buffering for whatever reason),
 ``` js
   function pipeSomething(callback) {
     //
-    // You have a stream (e.g. http.ResponseStream) and you 
+    // You have a stream (e.g. http.ResponseStream) and you
     // have an optional `callback`.
     //
     var stream = new require('stream').Stream;
@@ -169,11 +169,11 @@ Often when working with streams (especially when buffering for whatever reason),
         if (callback)
           callback(err);
         }
-        
+
         stream.emit('error', err);
         return;
       }
-      
+
       source.pipe(stream);
     })
 
@@ -186,7 +186,7 @@ You may pass either a `function` or `EventEmitter` instance to `errs.handle`.
 ``` js
   function pipeSomething(callback) {
     //
-    // You have a stream (e.g. http.ResponseStream) and you 
+    // You have a stream (e.g. http.ResponseStream) and you
     // have an optional `callback`.
     //
     var stream = new require('stream').Stream;
@@ -202,7 +202,7 @@ You may pass either a `function` or `EventEmitter` instance to `errs.handle`.
         //
         return errs.handle(err, callback || stream);
       }
-      
+
       source.pipe(stream);
     })
 
@@ -210,11 +210,11 @@ You may pass either a `function` or `EventEmitter` instance to `errs.handle`.
   }
 ```
 
-If you wish to invoke both a `callback` function and an `error` event simply pass both: 
+If you wish to invoke both a `callback` function and an `error` event simply pass both:
 
 ``` js
   errs.handle(err, callback, stream);
-``` 
+```
 
 ## Methods
 The `errs` modules exposes some simple utility methods:
@@ -246,8 +246,8 @@ All tests are written with [vows][2] and should be run with [npm][3]:
   $ npm test
 ```
 
-#### Author: [Nodejitsu Inc.](http://www.nodejitsu.com)
-#### Contributors: [Charlie Robbins](http://github.com/indexzero), [Nuno Job](http://github.com/dscape)
+#### Author: [Charlie Robbins](http://github.com/indexzero)
+#### Contributors: [Nuno Job](http://github.com/dscape)
 #### License: MIT
 
 [0]: http://www.devthought.com/2011/12/22/a-string-is-not-an-error/
