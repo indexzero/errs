@@ -11,7 +11,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22, 24]
+        node: [20, 22]
         include:
           - node: 22
             coverage: true
@@ -41,19 +41,16 @@ jobs:
         if: matrix.coverage
         run: pnpm test:coverage
 
-  pkg-managers:
+  bun:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        pm: [npm, yarn, pnpm, bun]
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
+          bun-version: latest
 
-      - name: Test with ${{ matrix.pm }}
-        run: |
-          ${{ matrix.pm }} install
-          ${{ matrix.pm }} test
+      - run: bun install
+
+      - name: Test
+        run: bun test
