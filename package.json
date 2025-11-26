@@ -1,29 +1,64 @@
 {
   "name": "errs",
-  "description": "Simple error creation and passing utilities",
-  "version": "0.3.2",
-  "author": "Charlie Robbins <charlie.robbins@gmail.com>",
-  "maintainers": [
-    "dscape <nuno@nodejitsu.com>"
+  "version": "1.0.0",
+  "description": "Simple error creation, boundaries, and formatting utilities",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./lib/errs.d.ts",
+      "import": "./lib/errs.js"
+    },
+    "./boundary": {
+      "types": "./lib/boundary.d.ts",
+      "import": "./lib/boundary.js"
+    },
+    "./format": {
+      "types": "./lib/format.d.ts",
+      "import": "./lib/format.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./lib/errs.js",
+  "types": "./lib/errs.d.ts",
+  "files": [
+    "lib",
+    "!lib/**/*.test.js"
   ],
+  "scripts": {
+    "test": "node --test test/**/*.test.js",
+    "test:coverage": "node --test --experimental-test-coverage test/**/*.test.js",
+    "test:watch": "node --test --watch test/**/*.test.js",
+    "lint": "eslint lib test examples",
+    "lint:fix": "eslint lib test examples --fix"
+  },
   "repository": {
     "type": "git",
-    "url": "http://github.com/indexzero/errs.git"
+    "url": "git+https://github.com/indexzero/errs.git"
   },
+  "bugs": {
+    "url": "https://github.com/indexzero/errs/issues"
+  },
+  "homepage": "https://github.com/indexzero/errs#readme",
   "keywords": [
     "errors",
     "error",
-    "utilities"
+    "utilities",
+    "aggregate-error",
+    "error-boundary",
+    "error-cause",
+    "formatting"
   ],
-  "devDependencies": {
-    "vows": "0.8.x"
-  },
-  "main": "./lib/errs",
-  "scripts": {
-    "test": "vows test/*-test.js --spec"
-  },
+  "author": "Charlie Robbins <charlie.robbins@gmail.com>",
+  "contributors": [
+    "Nuno Job <nuno@nodejitsu.com>"
+  ],
+  "license": "MIT",
+  "sideEffects": false,
   "engines": {
-    "node": ">= 0.4.0"
+    "node": ">=20.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "eslint": "^9.15.0"
   }
 }
-
