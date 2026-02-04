@@ -298,4 +298,177 @@ describe('errs', () => {
       assert.equal(boundary.count, 0)
     })
   })
+
+  describe('isErrorType()', () => {
+    it('returns true for matching error type', () => {
+      const err = new TypeError('test')
+      assert.equal(errs.isErrorType(err, TypeError), true)
+    })
+
+    it('returns false for non-matching error type', () => {
+      const err = new TypeError('test')
+      assert.equal(errs.isErrorType(err, RangeError), false)
+    })
+
+    it('returns false for non-error values', () => {
+      assert.equal(errs.isErrorType('string', Error), false)
+      assert.equal(errs.isErrorType(null, Error), false)
+      assert.equal(errs.isErrorType(undefined, Error), false)
+    })
+
+    it('works with custom error classes', () => {
+      class CustomError extends Error {
+        name = 'CustomError'
+      }
+      const err = new CustomError('test')
+      assert.equal(errs.isErrorType(err, CustomError), true)
+      assert.equal(errs.isErrorType(err, Error), true)
+      assert.equal(errs.isErrorType(err, TypeError), false)
+    })
+  })
+
+  describe('isRegisteredType()', () => {
+    it('returns true for registered error type', () => {
+      class RegisteredError extends Error {
+        name = 'RegisteredError'
+      }
+      errs.register('registered', RegisteredError)
+      const err = new RegisteredError('test')
+      assert.equal(errs.isRegisteredType(err, 'registered'), true)
+      errs.unregister('registered')
+    })
+
+    it('returns false for unregistered type name', () => {
+      const err = new Error('test')
+      assert.equal(errs.isRegisteredType(err, 'nonexistent'), false)
+    })
+
+    it('returns false when error is wrong type', () => {
+      class RegisteredError extends Error {
+        name = 'RegisteredError'
+      }
+      errs.register('registered', RegisteredError)
+      const err = new Error('test')
+      assert.equal(errs.isRegisteredType(err, 'registered'), false)
+      errs.unregister('registered')
+    })
+  })
+
+  describe('assertErrorType()', () => {
+    it('returns error when type matches', () => {
+      const err = new TypeError('test')
+      const result = errs.assertErrorType(err, TypeError)
+      assert.equal(result, err)
+    })
+
+    it('throws TypeError when type does not match', () => {
+      const err = new RangeError('test')
+      assert.throws(() => {
+        errs.assertErrorType(err, TypeError)
+      }, TypeError)
+    })
+
+    it('throws with default message', () => {
+      const err = new RangeError('test')
+      try {
+        errs.assertErrorType(err, TypeError)
+        assert.fail('Should have thrown')
+      } catch (e) {
+        assert.match(e.message, /Expected TypeError, got RangeError/)
+      }
+    })
+
+    it('throws with custom message', () => {
+      const err = new RangeError('test')
+      try {
+        errs.assertErrorType(err, TypeError, 'Custom assertion message')
+        assert.fail('Should have thrown')
+      } catch (e) {
+        assert.equal(e.message, 'Custom assertion message')
+      }
+    })
+
+    it('handles non-error values', () => {
+      try {
+        errs.assertErrorType('not an error', TypeError)
+        assert.fail('Should have thrown')
+      } catch (e) {
+        assert(e instanceof TypeError)
+      }
+    })
+  })
+
+  describe('tryCatch()', () => {
+    it('returns ok result for successful function', () => {
+      const result = errs.tryCatch(() => 42)
+      assert.equal(result.ok, true)
+      assert.equal(result.value, 42)
+    })
+
+    it('returns error result for throwing function', () => {
+      const result = errs.tryCatch(() => {
+        throw new Error('test error')
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'test error')
+    })
+
+    it('converts non-Error throws to Error', () => {
+      const result = errs.tryCatch(() => {
+        throw 'string error'
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'string error')
+    })
+
+    it('works with JSON.parse', () => {
+      const good = errs.tryCatch(() => JSON.parse('{"a":1}'))
+      assert.equal(good.ok, true)
+      assert.deepEqual(good.value, { a: 1 })
+
+      const bad = errs.tryCatch(() => JSON.parse('not json'))
+      assert.equal(bad.ok, false)
+      assert(bad.error instanceof SyntaxError)
+    })
+  })
+
+  describe('tryCatchAsync()', () => {
+    it('returns ok result for successful async function', async () => {
+      const result = await errs.tryCatchAsync(async () => {
+        return 42
+      })
+      assert.equal(result.ok, true)
+      assert.equal(result.value, 42)
+    })
+
+    it('returns error result for rejecting function', async () => {
+      const result = await errs.tryCatchAsync(async () => {
+        throw new Error('async error')
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'async error')
+    })
+
+    it('converts non-Error rejections to Error', async () => {
+      const result = await errs.tryCatchAsync(async () => {
+        throw 'string rejection'
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'string rejection')
+    })
+
+    it('works with Promise-returning functions', async () => {
+      const good = await errs.tryCatchAsync(() => Promise.resolve(123))
+      assert.equal(good.ok, true)
+      assert.equal(good.value, 123)
+
+      const bad = await errs.tryCatchAsync(() => Promise.reject(new Error('rejected')))
+      assert.equal(bad.ok, false)
+      assert.equal(bad.error.message, 'rejected')
+    })
+  })
 })

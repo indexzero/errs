@@ -254,4 +254,108 @@ describe('ErrorBoundary', () => {
       assert.match(boundary.errors[1].message, /Op 4 failed/)
     })
   })
+
+  describe('trap()', () => {
+    it('returns ok result for successful function', () => {
+      const boundary = new ErrorBoundary()
+      const result = boundary.trap(() => 42)
+      assert.equal(result.ok, true)
+      assert.equal(result.value, 42)
+      assert.equal(boundary.count, 0)
+    })
+
+    it('returns error result and adds to boundary on throw', () => {
+      const boundary = new ErrorBoundary()
+      const result = boundary.trap(() => {
+        throw new Error('trap error')
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'trap error')
+      assert.equal(boundary.count, 1)
+      assert.equal(boundary.errors[0].message, 'trap error')
+    })
+
+    it('converts non-Error throws to Error', () => {
+      const boundary = new ErrorBoundary()
+      const result = boundary.trap(() => {
+        throw 'string error'
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'string error')
+      assert.equal(boundary.count, 1)
+    })
+
+    it('collects multiple errors from repeated traps', () => {
+      const boundary = new ErrorBoundary()
+
+      boundary.trap(() => { throw new Error('error 1') })
+      boundary.trap(() => 'success')
+      boundary.trap(() => { throw new Error('error 2') })
+
+      assert.equal(boundary.count, 2)
+      assert.equal(boundary.errors[0].message, 'error 1')
+      assert.equal(boundary.errors[1].message, 'error 2')
+    })
+  })
+
+  describe('trapAsync()', () => {
+    it('returns ok result for successful async function', async () => {
+      const boundary = new ErrorBoundary()
+      const result = await boundary.trapAsync(async () => 42)
+      assert.equal(result.ok, true)
+      assert.equal(result.value, 42)
+      assert.equal(boundary.count, 0)
+    })
+
+    it('returns error result and adds to boundary on rejection', async () => {
+      const boundary = new ErrorBoundary()
+      const result = await boundary.trapAsync(async () => {
+        throw new Error('async trap error')
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'async trap error')
+      assert.equal(boundary.count, 1)
+      assert.equal(boundary.errors[0].message, 'async trap error')
+    })
+
+    it('converts non-Error rejections to Error', async () => {
+      const boundary = new ErrorBoundary()
+      const result = await boundary.trapAsync(async () => {
+        throw 'string rejection'
+      })
+      assert.equal(result.ok, false)
+      assert(result.error instanceof Error)
+      assert.equal(result.error.message, 'string rejection')
+      assert.equal(boundary.count, 1)
+    })
+
+    it('works with Promise-returning functions', async () => {
+      const boundary = new ErrorBoundary()
+
+      const good = await boundary.trapAsync(() => Promise.resolve(123))
+      assert.equal(good.ok, true)
+      assert.equal(good.value, 123)
+
+      const bad = await boundary.trapAsync(() => Promise.reject(new Error('rejected')))
+      assert.equal(bad.ok, false)
+      assert.equal(bad.error.message, 'rejected')
+
+      assert.equal(boundary.count, 1)
+    })
+
+    it('collects errors from parallel async traps', async () => {
+      const boundary = new ErrorBoundary()
+
+      await Promise.all([
+        boundary.trapAsync(async () => { throw new Error('async 1') }),
+        boundary.trapAsync(async () => 'success'),
+        boundary.trapAsync(async () => { throw new Error('async 2') })
+      ])
+
+      assert.equal(boundary.count, 2)
+    })
+  })
 })
