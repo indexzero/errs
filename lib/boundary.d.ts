@@ -15,7 +15,12 @@ export interface ErrorBoundaryOptions {
 }
 
 /**
- * ErrorBoundary - Collects errors without immediate throwing (Effect-style)
+ * Result type for trap operations
+ */
+export type Result<T> = { ok: true; value: T } | { ok: false; error: Error }
+
+/**
+ * ErrorBoundary - Collects errors without immediate throwing
  */
 export class ErrorBoundary {
   /**
@@ -66,4 +71,19 @@ export class ErrorBoundary {
    * @returns This boundary for chaining
    */
   clear(): this
+
+  /**
+   * Executes fn, traps error to boundary if thrown, returns Result
+   * Named after bash's `trap` command (set -euo pipefail)
+   * @param fn - Function to execute
+   * @returns Result containing value or error
+   */
+  trap<T>(fn: () => T): Result<T>
+
+  /**
+   * Async version of trap - executes fn, traps error to boundary if thrown
+   * @param fn - Async function to execute
+   * @returns Promise of Result containing value or error
+   */
+  trapAsync<T>(fn: () => Promise<T>): Promise<Result<T>>
 }

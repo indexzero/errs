@@ -1,8 +1,8 @@
 import { EventEmitter } from 'node:events'
-import { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
+import { ErrorBoundary, ErrorBoundaryOptions, Result } from './boundary.js'
 import { format, FormatOptions } from './format.js'
 
-export { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
+export { ErrorBoundary, ErrorBoundaryOptions, Result } from './boundary.js'
 export { format, FormatOptions } from './format.js'
 
 /**
@@ -102,6 +102,53 @@ export function parallel<T>(promises: Promise<T>[], options?: ParallelOptions): 
  */
 export function toJSON(error: Error): Record<string, unknown>
 
+/**
+ * Type guard: checks if error is instance of ErrorClass
+ * @param error - The error to check
+ * @param ErrorClass - The error class to check against
+ * @returns True if error is instance of ErrorClass
+ */
+export function isErrorType<E extends Error>(
+  error: unknown,
+  ErrorClass: new (...args: unknown[]) => E
+): error is E
+
+/**
+ * Type guard: checks if error matches a registered type name
+ * @param error - The error to check
+ * @param typeName - The registered type name
+ * @returns True if error is instance of the registered type
+ */
+export function isRegisteredType(error: unknown, typeName: string): boolean
+
+/**
+ * Asserts error is a specific type, throws TypeError if not
+ * @param error - The error to check
+ * @param ErrorClass - The expected error class
+ * @param message - Custom error message
+ * @returns The error, narrowed to type E
+ * @throws TypeError if error is not an instance of ErrorClass
+ */
+export function assertErrorType<E extends Error>(
+  error: unknown,
+  ErrorClass: new (...args: unknown[]) => E,
+  message?: string
+): E
+
+/**
+ * Wraps a sync function to return Result instead of throwing
+ * @param fn - Function to execute
+ * @returns Result containing value or error
+ */
+export function tryCatch<T>(fn: () => T): Result<T>
+
+/**
+ * Wraps an async function to return Result instead of throwing
+ * @param fn - Async function to execute
+ * @returns Promise of Result containing value or error
+ */
+export function tryCatchAsync<T>(fn: () => Promise<T>): Promise<Result<T>>
+
 declare const errs: {
   registered: typeof registered
   create: typeof create
@@ -113,6 +160,11 @@ declare const errs: {
   parallel: typeof parallel
   toJSON: typeof toJSON
   format: typeof format
+  isErrorType: typeof isErrorType
+  isRegisteredType: typeof isRegisteredType
+  assertErrorType: typeof assertErrorType
+  tryCatch: typeof tryCatch
+  tryCatchAsync: typeof tryCatchAsync
 }
 
 export default errs
