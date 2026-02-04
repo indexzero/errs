@@ -5,7 +5,9 @@ Simple error creation, boundaries, and formatting utilities for modern Node.js a
 ## Features
 
 - **Simple Error Creation** - Create errors with custom properties in one line
-- **Error Boundaries** - Effect-style error collection without immediate throwing
+- **Error Boundaries** - Collect errors without immediate throwing
+- **Type Guards** - Runtime type checking for errors with TypeScript support
+- **Result Pattern** - Rust-style `tryCatch` for exception-free error handling
 - **Multi-Format Output** - Format errors for terminal, JSON, or HTML
 - **Native Cause Chains** - Built-in support for ES2022 `Error.cause`
 - **Error Type Registration** - Register and reuse custom error types
@@ -152,6 +154,103 @@ boundary.clear()
 - `toAggregateError(message)` - Convert to AggregateError
 - `throwIfErrors(message)` - Throw if errors exist
 - `clear()` - Remove all errors
+- `trap(fn)` - Execute sync function, trap errors to boundary
+- `trapAsync(fn)` - Execute async function, trap errors to boundary
+
+#### `boundary.trap(fn)` / `boundary.trapAsync(fn)`
+
+Execute functions and automatically collect errors without throwing.
+
+```js
+const boundary = errs.boundary()
+
+// Sync operations
+const result = boundary.trap(() => JSON.parse(userInput))
+if (result.ok) {
+  console.log('Parsed:', result.value)
+} else {
+  console.log('Parse failed, error collected')
+}
+
+// Async operations
+const fetched = await boundary.trapAsync(() => fetch(url))
+if (fetched.ok) {
+  const data = await fetched.value.json()
+}
+
+// Process multiple and handle all errors at once
+items.forEach(item => boundary.trap(() => processItem(item)))
+boundary.throwIfErrors('Batch processing failed')
+```
+
+### Type Guards
+
+#### `errs.isErrorType(error, ErrorClass)`
+
+Type guard that checks if an error is an instance of a specific class.
+
+```js
+try {
+  await fetchData()
+} catch (err) {
+  if (errs.isErrorType(err, TypeError)) {
+    // TypeScript knows err is TypeError here
+    console.log('Type error occurred')
+  }
+}
+```
+
+#### `errs.isRegisteredType(error, typeName)`
+
+Check if an error matches a registered type name.
+
+```js
+errs.register('validation', ValidationError)
+
+if (errs.isRegisteredType(err, 'validation')) {
+  // Handle validation error
+}
+```
+
+#### `errs.assertErrorType(error, ErrorClass, message?)`
+
+Assert error is a specific type, throws TypeError if not.
+
+```js
+function handleHttpError(err) {
+  // Throws TypeError if err is not HttpError
+  const httpErr = errs.assertErrorType(err, HttpError)
+  return httpErr.status // TypeScript knows this is HttpError
+}
+```
+
+### Result Pattern
+
+#### `errs.tryCatch(fn)`
+
+Wraps a sync function to return a Result instead of throwing.
+
+```js
+const result = errs.tryCatch(() => JSON.parse(input))
+if (result.ok) {
+  console.log(result.value)
+} else {
+  console.log('Parse error:', result.error.message)
+}
+```
+
+#### `errs.tryCatchAsync(fn)`
+
+Wraps an async function to return a Result instead of throwing.
+
+```js
+const result = await errs.tryCatchAsync(() => fetch(url))
+if (result.ok) {
+  const data = await result.value.json()
+} else {
+  console.log('Fetch failed:', result.error.message)
+}
+```
 
 ### Parallel Operations
 
@@ -281,10 +380,21 @@ const json = errs.toJSON(err)
 All functions are available as named exports:
 
 ```js
-import { create, boundary, format, parallel } from 'errs'
+import {
+  create,
+  boundary,
+  format,
+  parallel,
+  isErrorType,
+  isRegisteredType,
+  assertErrorType,
+  tryCatch,
+  tryCatchAsync
+} from 'errs'
 
 const err = create('Error message')
 const bound = boundary()
+const result = tryCatch(() => JSON.parse(data))
 ```
 
 ## Subpath Exports
