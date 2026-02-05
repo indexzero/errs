@@ -42,9 +42,7 @@ async function main() {
 
   const { results, boundary: opBoundary } = await errs.parallel(operations)
 
-  const successfulUsers = results
-    .filter(r => r.status === 'fulfilled')
-    .map(r => r.value)
+  const successfulUsers = results.filter(r => r.status === 'fulfilled').map(r => r.value)
 
   console.log('Successful users:', successfulUsers)
   console.log(`Failed operations: ${opBoundary.count}`)

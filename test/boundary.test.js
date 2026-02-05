@@ -6,8 +6,8 @@
  *
  */
 
-import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
+import { describe, it } from 'node:test'
 import { ErrorBoundary } from '../lib/boundary.js'
 
 describe('ErrorBoundary', () => {
@@ -58,10 +58,7 @@ describe('ErrorBoundary', () => {
 
     it('allows chaining multiple adds', () => {
       const boundary = new ErrorBoundary()
-      boundary
-        .add(new Error('1'))
-        .add(new Error('2'))
-        .add(new Error('3'))
+      boundary.add(new Error('1')).add(new Error('2')).add(new Error('3'))
       assert.equal(boundary.count, 3)
     })
   })
@@ -239,9 +236,7 @@ describe('ErrorBoundary', () => {
         () => Promise.reject(new Error('Op 4 failed'))
       ]
 
-      const results = await Promise.allSettled(
-        operations.map(op => op())
-      )
+      const results = await Promise.allSettled(operations.map(op => op()))
 
       for (const result of results) {
         if (result.status === 'rejected') {
@@ -290,9 +285,13 @@ describe('ErrorBoundary', () => {
     it('collects multiple errors from repeated traps', () => {
       const boundary = new ErrorBoundary()
 
-      boundary.trap(() => { throw new Error('error 1') })
+      boundary.trap(() => {
+        throw new Error('error 1')
+      })
       boundary.trap(() => 'success')
-      boundary.trap(() => { throw new Error('error 2') })
+      boundary.trap(() => {
+        throw new Error('error 2')
+      })
 
       assert.equal(boundary.count, 2)
       assert.equal(boundary.errors[0].message, 'error 1')
@@ -350,9 +349,13 @@ describe('ErrorBoundary', () => {
       const boundary = new ErrorBoundary()
 
       await Promise.all([
-        boundary.trapAsync(async () => { throw new Error('async 1') }),
+        boundary.trapAsync(async () => {
+          throw new Error('async 1')
+        }),
         boundary.trapAsync(async () => 'success'),
-        boundary.trapAsync(async () => { throw new Error('async 2') })
+        boundary.trapAsync(async () => {
+          throw new Error('async 2')
+        })
       ])
 
       assert.equal(boundary.count, 2)

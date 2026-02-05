@@ -2,9 +2,9 @@ import errs from '../lib/errs.js'
 
 console.log('Transparent stack trace (no errs.js reference):')
 console.log(
-  errs.create('This is an error. There are many like it. It has a transparent stack trace.')
-    .stack
-    .split('\n')
+  errs
+    .create('This is an error. There are many like it. It has a transparent stack trace.')
+    .stack.split('\n')
 )
 
 // Demonstrate cause chain

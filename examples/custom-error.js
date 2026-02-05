@@ -11,11 +11,7 @@ class MyError extends Error {
 // Register the error type
 errs.register('myerror', MyError)
 
-console.log(
-  errs.create('myerror')
-    .stack
-    .split('\n')
-)
+console.log(errs.create('myerror').stack.split('\n'))
 
 // Demonstrate with additional properties
 const err = errs.create('myerror', {

@@ -22,14 +22,22 @@
   "types": "./lib/errs.d.ts",
   "files": [
     "lib",
+    "dist",
     "!lib/**/*.test.js"
   ],
   "scripts": {
     "test": "node --test test/**/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage test/**/*.test.js",
     "test:watch": "node --test --watch test/**/*.test.js",
-    "lint": "eslint lib test examples",
-    "lint:fix": "eslint lib test examples --fix"
+    "test:examples": "bash test/examples.test.sh",
+    "build:types": "tsc",
+    "lint": "biome lint lib test examples",
+    "lint:fix": "biome lint --write lib test examples",
+    "format": "biome format --write lib test examples",
+    "format:check": "biome format lib test examples",
+    "check": "biome check lib test examples && pnpm run build:types",
+    "check:fix": "biome check --write lib test examples",
+    "prepublishOnly": "pnpm run build:types"
   },
   "repository": {
     "type": "git",
@@ -58,7 +66,9 @@
     "node": ">=22.0.0"
   },
   "devDependencies": {
-    "@eslint/js": "^9.15.0",
-    "eslint": "^9.15.0"
-  }
+    "@biomejs/biome": "^2.3.8",
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  },
+  "packageManager": "pnpm@10.25.0"
 }

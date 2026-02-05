@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { ErrorBoundary, ErrorBoundaryOptions, Result } from './boundary.js'
-import { format, FormatOptions } from './format.js'
+import { format } from './format.js'
 
 export { ErrorBoundary, ErrorBoundaryOptions, Result } from './boundary.js'
 export { format, FormatOptions } from './format.js'
@@ -41,7 +41,10 @@ export const registered: Record<string, new (...args: unknown[]) => Error>
  * @param opts - Options for creating the error
  * @returns The created error
  */
-export function create(type?: string | ErrorOptions | string[] | (() => ErrorOptions), opts?: ErrorOptions): Error
+export function create(
+  type?: string | ErrorOptions | string[] | (() => ErrorOptions),
+  opts?: ErrorOptions
+): Error
 export function create(opts?: ErrorOptions | string | string[] | (() => ErrorOptions)): Error
 
 /**
@@ -51,7 +54,11 @@ export function create(opts?: ErrorOptions | string | string[] | (() => ErrorOpt
  * @param opts - Options for creating the error
  * @returns The merged error with cause chain
  */
-export function merge(err: Error | unknown, type?: string | ErrorOptions, opts?: ErrorOptions): Error
+export function merge(
+  err: Error | unknown,
+  type?: string | ErrorOptions,
+  opts?: ErrorOptions
+): Error
 
 /**
  * Handles an error by invoking a callback or emitting on an EventEmitter
@@ -64,7 +71,7 @@ export function handle(
   error: Error | string | ErrorOptions,
   callback?: ((err: Error) => void) | EventEmitter,
   stream?: EventEmitter
-): EventEmitter | void
+): EventEmitter | undefined
 
 /**
  * Registers an error type for future calls to create()
@@ -93,7 +100,10 @@ export function boundary(options?: ErrorBoundaryOptions): ErrorBoundary
  * @param options - Options including optional boundary
  * @returns Results and boundary
  */
-export function parallel<T>(promises: Promise<T>[], options?: ParallelOptions): Promise<ParallelResult<T>>
+export function parallel<T>(
+  promises: Promise<T>[],
+  options?: ParallelOptions
+): Promise<ParallelResult<T>>
 
 /**
  * Converts an error to JSON format

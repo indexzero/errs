@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import errs from '../lib/errs.js'
 
-process.on('uncaughtException', (err) => {
+process.on('uncaughtException', err => {
   console.log('Caught exception:')
   console.log(errs.merge(err, { namespace: 'uncaughtException' }))
   console.log('\nFormatted:')

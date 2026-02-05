@@ -6,9 +6,9 @@
  *
  */
 
-import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 import { EventEmitter } from 'node:events'
+import { describe, it } from 'node:test'
 import errs from '../lib/errs.js'
 
 class NamedError extends Error {
@@ -23,7 +23,7 @@ class AnError extends Error {
 
 function assertTransparentStack(err) {
   assert.equal(typeof err.stack, 'string')
-  err.stack.split('\n').forEach(function (line) {
+  err.stack.split('\n').forEach(line => {
     assert.equal(/\/lib\/errs\.js:/.test(line), false)
   })
 }
@@ -101,7 +101,12 @@ describe('errs', () => {
 
     describe('with a function', () => {
       it('creates error from function result', () => {
-        const opts = { 'a-function': 'that returns an object', should: true, have: 4, properties: 'yes' }
+        const opts = {
+          'a-function': 'that returns an object',
+          should: true,
+          have: 4,
+          properties: 'yes'
+        }
         const fn = () => opts
         const err = errs.create(fn)
         assert(err instanceof Error)
@@ -203,25 +208,25 @@ describe('errs', () => {
   })
 
   describe('handle()', () => {
-    it('invokes callback with error', (t, done) => {
+    it('invokes callback with error', (_t, done) => {
       const err = errs.create('Test error')
-      errs.handle(err, (e) => {
+      errs.handle(err, e => {
         assert.equal(e, err)
         done()
       })
     })
 
-    it('emits error on EventEmitter', (t, done) => {
+    it('emits error on EventEmitter', (_t, done) => {
       const err = errs.create('Some emitted error')
       const stream = new EventEmitter()
-      stream.once('error', (e) => {
+      stream.once('error', e => {
         assert.equal(e, err)
         done()
       })
       errs.handle(err, stream)
     })
 
-    it('invokes callback and emits on stream', (t, done) => {
+    it('invokes callback and emits on stream', (_t, done) => {
       const err = errs.create('Some emitted error')
       const stream = new EventEmitter()
       let invoked = 0
@@ -237,10 +242,10 @@ describe('errs', () => {
       errs.handle(err, onError, stream)
     })
 
-    it('returns emitter when no callback provided', (t, done) => {
+    it('returns emitter when no callback provided', (_t, done) => {
       const err = errs.create('Some emitted error')
       const emitter = errs.handle(err)
-      emitter.once('error', (e) => {
+      emitter.once('error', e => {
         assert.equal(e, err)
         done()
       })
@@ -283,9 +288,7 @@ describe('errs', () => {
       assert.equal(boundary.count, 2)
       assert.equal(boundary.hasErrors(), true)
 
-      const successValues = results
-        .filter(r => r.status === 'fulfilled')
-        .map(r => r.value)
+      const successValues = results.filter(r => r.status === 'fulfilled').map(r => r.value)
 
       assert.deepEqual(successValues, [1, 2])
     })
