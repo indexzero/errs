@@ -1,7 +1,7 @@
 /*
  * boundary.test.js: Tests for the ErrorBoundary class.
  *
- * (C) 2025, Charlie Robbins, Nuno Job, and the Contributors.
+ * (C) 2011-2025, Charlie Robbins, Nuno Job, and the Contributors.
  * MIT LICENSE
  *
  */

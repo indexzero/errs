@@ -55,7 +55,7 @@
   "license": "MIT",
   "sideEffects": false,
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",

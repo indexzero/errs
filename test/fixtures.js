@@ -1,7 +1,7 @@
 /*
  * fixtures.js: Test fixtures for the `errs` module.
  *
- * (C) 2012, Charlie Robbins, Nuno Job, and the Contributors.
+ * (C) 2011-2025, Charlie Robbins, Nuno Job, and the Contributors.
  * MIT LICENSE
  *
  */
