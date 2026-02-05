@@ -10,10 +10,7 @@
     "includes": [
       "**",
       "!**/node_modules/**",
-      "!**/dist/**",
-      "!test/errs-test.js",
-      "!test/macros.js",
-      "!test/fixtures.js"
+      "!**/dist/**"
     ]
   },
   "formatter": {
