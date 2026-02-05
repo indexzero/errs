@@ -208,46 +208,54 @@ describe('errs', () => {
   })
 
   describe('handle()', () => {
-    it('invokes callback with error', (_t, done) => {
+    it('invokes callback with error', async () => {
       const err = errs.create('Test error')
-      errs.handle(err, e => {
-        assert.equal(e, err)
-        done()
+      await new Promise(resolve => {
+        errs.handle(err, e => {
+          assert.equal(e, err)
+          resolve()
+        })
       })
     })
 
-    it('emits error on EventEmitter', (_t, done) => {
+    it('emits error on EventEmitter', async () => {
       const err = errs.create('Some emitted error')
       const stream = new EventEmitter()
-      stream.once('error', e => {
-        assert.equal(e, err)
-        done()
+      await new Promise(resolve => {
+        stream.once('error', e => {
+          assert.equal(e, err)
+          resolve()
+        })
+        errs.handle(err, stream)
       })
-      errs.handle(err, stream)
     })
 
-    it('invokes callback and emits on stream', (_t, done) => {
+    it('invokes callback and emits on stream', async () => {
       const err = errs.create('Some emitted error')
       const stream = new EventEmitter()
       let invoked = 0
 
-      function onError(e) {
-        assert.equal(e, err)
-        if (++invoked === 2) {
-          done()
+      await new Promise(resolve => {
+        function onError(e) {
+          assert.equal(e, err)
+          if (++invoked === 2) {
+            resolve()
+          }
         }
-      }
 
-      stream.once('error', onError)
-      errs.handle(err, onError, stream)
+        stream.once('error', onError)
+        errs.handle(err, onError, stream)
+      })
     })
 
-    it('returns emitter when no callback provided', (_t, done) => {
+    it('returns emitter when no callback provided', async () => {
       const err = errs.create('Some emitted error')
       const emitter = errs.handle(err)
-      emitter.once('error', e => {
-        assert.equal(e, err)
-        done()
+      await new Promise(resolve => {
+        emitter.once('error', e => {
+          assert.equal(e, err)
+          resolve()
+        })
       })
     })
   })

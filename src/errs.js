@@ -129,7 +129,7 @@ function handle(error, callback, stream) {
 
   if (typeof callback !== 'function' || stream) {
     const emitter = stream || callback || new EventEmitter()
-    process.nextTick(() => {
+    queueMicrotask(() => {
       emitter.emit('error', error)
     })
     return emitter
