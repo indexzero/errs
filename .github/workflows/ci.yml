@@ -11,9 +11,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        node: [20, 22]
+        node: [22, 24]
         include:
-          - node: 22
+          - node: 24
             coverage: true
 
     steps:
@@ -31,7 +31,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Lint
-        if: matrix.node == 22
+        if: matrix.node == 24
         run: pnpm lint
 
       - name: Test

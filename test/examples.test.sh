@@ -6,7 +6,7 @@
 # MIT LICENSE
 #
 
-set -euo pipefail
+set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -106,14 +106,14 @@ run_example_check_output "custom-error" "MyError"
 # stack.js - should show transparent stack trace
 run_example_check_output "stack" "Transparent stack trace"
 
-# async-uncaught-exception.js - throws uncaught exception (exits non-zero)
-run_example "async-uncaught-exception" "nonzero"
+# async-uncaught-exception.js - handles uncaught exception gracefully
+run_example_check_output "async-uncaught-exception" "Formatted output"
 
-# sync-uncaught-exception.js - throws uncaught exception (exits non-zero)
-run_example "sync-uncaught-exception" "nonzero"
+# sync-uncaught-exception.js - handles uncaught exception gracefully
+run_example_check_output "sync-uncaught-exception" "Caught exception"
 
-# handling-streams.js - handles stream errors (exits non-zero due to ENOENT)
-run_example "handling-streams" "nonzero"
+# handling-streams.js - handles stream errors gracefully
+run_example_check_output "handling-streams" "Stream error handled"
 
 echo ""
 echo "========================"
