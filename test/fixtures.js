@@ -6,18 +6,18 @@
  *
  */
 
-var util = require('util');
+var util = require('util')
 
-var fixtures = exports;
+var fixtures = exports
 
 fixtures.NamedError = function NamedError() {
-  this.named = true;
-};
+  this.named = true
+}
 
-util.inherits(fixtures.NamedError, Error);
+util.inherits(fixtures.NamedError, Error)
 
 fixtures.AnError = function AnError() {
-  this.named = true;
-};
+  this.named = true
+}
 
-util.inherits(fixtures.AnError, Error);
+util.inherits(fixtures.AnError, Error)
