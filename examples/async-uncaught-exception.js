@@ -1,9 +1,13 @@
-var fs = require('fs'),
-    errs = require('../lib/errs');
+import fs from 'node:fs'
+import errs from '../src/errs.js'
 
-process.on('uncaughtException', function(err) {
-  console.log(errs.merge(err, {namespace: 'uncaughtException'}));
-});
+process.on('uncaughtException', err => {
+  console.log(errs.merge(err, { namespace: 'uncaughtException' }))
+  console.log('\nFormatted output:')
+  console.log(errs.format(err, { format: 'terminal' }))
+})
 
-var file = fs.createReadStream(__filename, {encoding: 'utf8'});
-file.on('data', function(b) { throw new Error('Oh Noes'); });
+const file = fs.createReadStream(import.meta.filename, { encoding: 'utf8' })
+file.on('data', () => {
+  throw new Error('Oh Noes')
+})

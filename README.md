@@ -1,256 +1,470 @@
-# errs [![Build Status](https://secure.travis-ci.org/indexzero/errs.png)](http://travis-ci.org/indexzero/errs)
+# errs
 
-Simple error creation and passing utilities focused on:
+Simple error creation, boundaries, and formatting utilities for modern Node.js applications.
 
-* [Creating Errors](#creating-errors)
-* [Reusing Error Types](#reusing-types)
-* [Merging with Existing Errors](#merging-errors)
-* [Optional Callback Invocation](#optional-invocation)
-* [Piping Error Events](#piping-errors)
+## Features
 
-<a name="creating-errors" />
-## Creating Errors
-
-You should know by now that [a String is not an Error][0]. Unfortunately the `Error` constructor in Javascript isn't all that convenient either. How often do you find yourself in this situation?
-
-``` js
-  var err = new Error('This is an error. There are many like it.');
-  err.someProperty = 'more syntax';
-  err.someOtherProperty = 'it wont stop.';
-  err.notEven = 'for the mayor';
-
-  throw err;
-```
-
-Rest your fingers, `errs` is here to help. The following is equivalent to the above:
-
-``` js
-  var errs = require('errs');
-
-  throw errs.create({
-    message: 'This is an error. There are many like it.',
-    someProperty: 'more syntax',
-    someOtherProperty: 'it wont stop.',
-    notEven: 'for the mayor'
-  });
-```
-
-<a name="reusing-types" />
-## Reusing Custom Error Types
-
-`errs` also exposes an [inversion of control][1] interface for easily reusing custom error types across your application. Custom Error Types registered with `errs` will transparently invoke `Error` constructor and `Error.captureStackTrace` to attach transparent stack traces:
-
-``` js
-  /*
-   * file-a.js: Create and register your error type.
-   *
-   */
-
-  var util = require('util'),
-      errs = require('errs');
-
-  function MyError() {
-    this.message = 'This is my error; I made it myself. It has a transparent stack trace.';
-  }
-
-  //
-  // Alternatively `MyError.prototype.__proto__ = Error;`
-  //
-  util.inherits(MyError, Error);
-
-  //
-  // Register the error type
-  //
-  errs.register('myerror', MyError);
-
-
-
-  /*
-   * file-b.js: Use your error type.
-   *
-   */
-
-  var errs = require('errs');
-
-  console.log(
-    errs.create('myerror')
-      .stack
-      .split('\n')
-  );
-```
-
-The output from the two files above is shown below. Notice how it contains no references to `errs.js`:
-
-```
-[ 'MyError: This is my error; I made it myself. It has a transparent stack trace.',
-  '    at Object.<anonymous> (/file-b.js:19:8)',
-  '    at Module._compile (module.js:441:26)',
-  '    at Object..js (module.js:459:10)',
-  '    at Module.load (module.js:348:31)',
-  '    at Function._load (module.js:308:12)',
-  '    at Array.0 (module.js:479:10)',
-  '    at EventEmitter._tickCallback (node.js:192:40)' ]
-```
-
-<a name="merging-errors" />
-## Merging with Existing Errors
-
-When working with errors you catch or are returned in a callback you can extend those errors with properties by using the `errs.merge` method. This will also create a human readable error message and stack-trace:
-
-``` js
-process.on('uncaughtException', function(err) {
-  console.log(errs.merge(err, {namespace: 'uncaughtException'}));
-});
-
-var file = fs.createReadStream('FileDoesNotExist.here');
-```
-
-``` js
-{ [Error: Unspecified error]
-  name: 'Error',
-  namespace: 'uncaughtException',
-  errno: 34,
-  code: 'ENOENT',
-  path: 'FileDoesNotExist.here',
-  description: 'ENOENT, no such file or directory \'FileDoesNotExist.here\'',
-  stacktrace: [ 'Error: ENOENT, no such file or directory \'FileDoesNotExist.here\'' ] }
-```
-
-<a name="optional-invocation" />
-## Optional Callback Invocation
-
-Node.js handles asynchronous IO through the elegant `EventEmitter` API. In many scenarios the `callback` may be optional because you are returning an `EventEmitter` for piping or other event multiplexing. This complicates code with a lot of boilerplate:
-
-``` js
-  function importantFeature(callback) {
-    return someAsyncFn(function (err) {
-      if (err) {
-        if (callback) {
-          return callback(err);
-        }
-
-        throw err;
-      }
-    });
-  }
-```
-
-`errs` it presents a common API for both emitting `error` events and invoking continuations (i.e. callbacks) with errors. If a `callback` is supplied to `errs.handle()` it will be invoked with the error. It no `callback` is provided then an `EventEmitter` is returned which emits an `error` event on the next tick:
-
-``` js
-  function importantFeature(callback) {
-    return someAsyncFn(function (err) {
-      if (err) {
-        return errs.handle(err, callback);
-      }
-    });
-  }
-```
-
-<a name="piping-errors" />
-## Piping Errors
-
-Often when working with streams (especially when buffering for whatever reason), you may have already returned an `EventEmitter` or `Stream` instance by the time an error is handled.
-
-``` js
-  function pipeSomething(callback) {
-    //
-    // You have a stream (e.g. http.ResponseStream) and you
-    // have an optional `callback`.
-    //
-    var stream = new require('stream').Stream;
-
-    //
-    // You need to do something async which may respond with an
-    // error
-    //
-    getAnotherStream(function (err, source) {
-      if (err) {
-        if (callback)
-          callback(err);
-        }
-
-        stream.emit('error', err);
-        return;
-      }
-
-      source.pipe(stream);
-    })
-
-    return stream;
-  }
-```
-
-You may pass either a `function` or `EventEmitter` instance to `errs.handle`.
-
-``` js
-  function pipeSomething(callback) {
-    //
-    // You have a stream (e.g. http.ResponseStream) and you
-    // have an optional `callback`.
-    //
-    var stream = new require('stream').Stream;
-
-    //
-    // You need to do something async which may respond with an
-    // error
-    //
-    getAnotherStream(function (err, source) {
-      if (err) {
-        //
-        // Invoke the callback if it exists otherwise the stream.
-        //
-        return errs.handle(err, callback || stream);
-      }
-
-      source.pipe(stream);
-    })
-
-    return stream;
-  }
-```
-
-If you wish to invoke both a `callback` function and an `error` event simply pass both:
-
-``` js
-  errs.handle(err, callback, stream);
-```
-
-## Methods
-The `errs` modules exposes some simple utility methods:
-
-* `.create(type, opts)`: Creates a new error instance for with the specified `type` and `opts`. If the `type` is not registered then a new `Error` instance will be created.
-* `.register(type, proto)`: Registers the specified `proto` to `type` for future calls to `errors.create(type, opts)`.
-* `.unregister(type)`: Unregisters the specified `type` for future calls to `errors.create(type, opts)`.
-* `.handle(err, callback)`: Attempts to instantiate the given `error`. If the `error` is already a properly formed `error` object (with a `stack` property) it will not be modified.
-* `.merge(err, type, opts)`: Merges an existing error with a new error instance for with the specified `type` and `opts`.
+- **Simple Error Creation** - Create errors with custom properties in one line
+- **Error Boundaries** - Collect errors without immediate throwing
+- **Type Guards** - Runtime type checking for errors with TypeScript support
+- **Result Pattern** - Rust-style `tryCatch` for exception-free error handling
+- **Multi-Format Output** - Format errors for terminal, JSON, or HTML
+- **Native Cause Chains** - Built-in support for ES2022 `Error.cause`
+- **Error Type Registration** - Register and reuse custom error types
+- **Zero Dependencies** - No runtime dependencies
 
 ## Installation
 
-### Installing npm (node package manager)
-
-``` bash
-  $ curl http://npmjs.org/install.sh | sh
+```sh
+npm install errs
 ```
 
-### Installing errs
+## Quick Start
 
-``` bash
-  $ [sudo] npm install errs
+```js
+import errs from 'errs'
+
+// Create errors with custom properties
+const err = errs.create({
+  message: 'User not found',
+  status: 404,
+  code: 'USER_NOT_FOUND'
+})
+
+// Collect multiple errors without throwing
+const boundary = errs.boundary()
+boundary.add(new Error('Validation failed'))
+boundary.add(new Error('Invalid email'))
+if (boundary.hasErrors()) {
+  boundary.throwIfErrors()
+}
+
+// Format errors for different outputs
+console.log(errs.format(err, { format: 'terminal' }))
 ```
 
-## Tests
-All tests are written with [vows][2] and should be run with [npm][3]:
+## API Reference
 
-``` bash
-  $ npm test
+### Creating Errors
+
+#### `errs.create(opts)`
+
+Creates a new error with custom properties.
+
+```js
+// From a string
+const err = errs.create('Something went wrong')
+
+// From an object
+const err = errs.create({
+  message: 'Database connection failed',
+  status: 500,
+  code: 'DB_ERROR'
+})
+
+// From an array (joined with spaces)
+const err = errs.create(['Invalid', 'request', 'parameters'])
+
+// From a function
+const err = errs.create(() => ({
+  message: 'Dynamic error',
+  timestamp: Date.now()
+}))
 ```
 
-#### Author: [Charlie Robbins](http://github.com/indexzero)
-#### Contributors: [Nuno Job](http://github.com/dscape)
-#### License: MIT
+#### `errs.create(type, opts)`
 
-[0]: http://www.devthought.com/2011/12/22/a-string-is-not-an-error/
-[1]: http://martinfowler.com/articles/injection.html
-[2]: https://vowsjs.org
-[3]: https://npmjs.org
+Creates an error of a registered type.
+
+```js
+class ValidationError extends Error {
+  name = 'ValidationError'
+}
+
+errs.register('validation', ValidationError)
+
+const err = errs.create('validation', {
+  message: 'Invalid input',
+  field: 'email'
+})
+```
+
+### Merging Errors
+
+#### `errs.merge(error, opts)`
+
+Merges an existing error with new properties and sets native cause chain.
+
+```js
+try {
+  await fetchData()
+} catch (original) {
+  throw errs.merge(original, {
+    message: 'Failed to load user data',
+    userId: 123
+  })
+  // merged.cause === original
+}
+```
+
+### Error Boundaries
+
+#### `errs.boundary(options)`
+
+Creates an ErrorBoundary for collecting errors without immediate throwing.
+
+```js
+const boundary = errs.boundary({
+  maxErrors: 100,      // Maximum errors to collect (default: 1000)
+  captureStack: true   // Capture creation point (default: true)
+})
+
+// Collect errors
+try {
+  validateEmail(data.email)
+} catch (e) {
+  boundary.add(e)
+}
+
+try {
+  validateAge(data.age)
+} catch (e) {
+  boundary.add(e)
+}
+
+// Check and throw if errors exist
+if (boundary.hasErrors()) {
+  console.log(`Collected ${boundary.count} errors`)
+  boundary.throwIfErrors('Validation failed')
+}
+
+// Or get as AggregateError
+const aggregate = boundary.toAggregateError()
+
+// Clear and reuse
+boundary.clear()
+```
+
+#### ErrorBoundary Methods
+
+- `add(error)` - Add an error to the boundary
+- `hasErrors()` - Check if any errors collected
+- `count` - Get number of errors
+- `errors` - Get copy of all errors
+- `toAggregateError(message)` - Convert to AggregateError
+- `throwIfErrors(message)` - Throw if errors exist
+- `clear()` - Remove all errors
+- `trap(fn)` - Execute sync function, trap errors to boundary
+- `trapAsync(fn)` - Execute async function, trap errors to boundary
+
+#### `boundary.trap(fn)` / `boundary.trapAsync(fn)`
+
+Execute functions and automatically collect errors without throwing.
+
+```js
+const boundary = errs.boundary()
+
+// Sync operations
+const result = boundary.trap(() => JSON.parse(userInput))
+if (result.ok) {
+  console.log('Parsed:', result.value)
+} else {
+  console.log('Parse failed, error collected')
+}
+
+// Async operations
+const fetched = await boundary.trapAsync(() => fetch(url))
+if (fetched.ok) {
+  const data = await fetched.value.json()
+}
+
+// Process multiple and handle all errors at once
+items.forEach(item => boundary.trap(() => processItem(item)))
+boundary.throwIfErrors('Batch processing failed')
+```
+
+### Type Guards
+
+#### `errs.isErrorType(error, ErrorClass)`
+
+Type guard that checks if an error is an instance of a specific class.
+
+```js
+try {
+  await fetchData()
+} catch (err) {
+  if (errs.isErrorType(err, TypeError)) {
+    // TypeScript knows err is TypeError here
+    console.log('Type error occurred')
+  }
+}
+```
+
+#### `errs.isRegisteredType(error, typeName)`
+
+Check if an error matches a registered type name.
+
+```js
+errs.register('validation', ValidationError)
+
+if (errs.isRegisteredType(err, 'validation')) {
+  // Handle validation error
+}
+```
+
+#### `errs.assertErrorType(error, ErrorClass, message?)`
+
+Assert error is a specific type, throws TypeError if not.
+
+```js
+function handleHttpError(err) {
+  // Throws TypeError if err is not HttpError
+  const httpErr = errs.assertErrorType(err, HttpError)
+  return httpErr.status // TypeScript knows this is HttpError
+}
+```
+
+### Result Pattern
+
+#### `errs.tryCatch(fn)`
+
+Wraps a sync function to return a Result instead of throwing.
+
+```js
+const result = errs.tryCatch(() => JSON.parse(input))
+if (result.ok) {
+  console.log(result.value)
+} else {
+  console.log('Parse error:', result.error.message)
+}
+```
+
+#### `errs.tryCatchAsync(fn)`
+
+Wraps an async function to return a Result instead of throwing.
+
+```js
+const result = await errs.tryCatchAsync(() => fetch(url))
+if (result.ok) {
+  const data = await result.value.json()
+} else {
+  console.log('Fetch failed:', result.error.message)
+}
+```
+
+### Parallel Operations
+
+#### `errs.parallel(promises, options)`
+
+Run multiple promises and collect all errors.
+
+```js
+const { results, boundary } = await errs.parallel([
+  fetchUser(1),
+  fetchUser(2),
+  fetchUser(3)
+])
+
+// Get successful values
+const users = results
+  .filter(r => r.status === 'fulfilled')
+  .map(r => r.value)
+
+// Check for errors
+if (boundary.hasErrors()) {
+  console.error(`${boundary.count} requests failed`)
+}
+```
+
+### Error Formatting
+
+#### `errs.format(error, options)`
+
+Format errors for different output targets.
+
+```js
+// Terminal output with colors
+console.log(errs.format(error, { format: 'terminal', colors: true }))
+
+// JSON for logging
+logger.error(errs.format(error, { format: 'json', indent: 2 }))
+
+// HTML for error pages
+res.send(errs.format(error, { format: 'html' }))
+```
+
+**Terminal Output:**
+
+```
+╭─ TypeError: Cannot read property 'x' of undefined
+│
+│  at processUser (src/users.js:42:15)
+│  at async main (src/index.js:10:3)
+│
+├─ Caused by: NetworkError: Connection refused
+│
+│  at fetch (src/api.js:23:9)
+│
+╰─ 2 errors in chain
+```
+
+### Error Handling
+
+#### `errs.handle(error, callback, stream)`
+
+Unified error handling for callbacks and EventEmitters.
+
+```js
+// With callback
+errs.handle(err, (e) => console.error(e))
+
+// With EventEmitter
+errs.handle(err, emitter)
+
+// With both
+errs.handle(err, callback, emitter)
+
+// Returns emitter if no callback
+const emitter = errs.handle(err)
+emitter.on('error', handleError)
+```
+
+### Type Registration
+
+#### `errs.register(type, ErrorClass)`
+
+Register a custom error type.
+
+```js
+class HttpError extends Error {
+  name = 'HttpError'
+  constructor(message, status) {
+    super(message)
+    this.status = status
+  }
+}
+
+errs.register('http', HttpError)
+
+// Use registered type
+const err = errs.create('http', {
+  message: 'Not found',
+  status: 404
+})
+```
+
+#### `errs.unregister(type)`
+
+Unregister an error type.
+
+```js
+errs.unregister('http')
+```
+
+### JSON Conversion
+
+#### `errs.toJSON(error)`
+
+Convert error to JSON-serializable object.
+
+```js
+const err = new Error('Test error')
+err.code = 'TEST_CODE'
+
+const json = errs.toJSON(err)
+// { message: 'Test error', stack: '...', code: 'TEST_CODE' }
+```
+
+## Named Exports
+
+All functions are available as named exports:
+
+```js
+import {
+  create,
+  boundary,
+  format,
+  parallel,
+  isErrorType,
+  isRegisteredType,
+  assertErrorType,
+  tryCatch,
+  tryCatchAsync
+} from 'errs'
+
+const err = create('Error message')
+const bound = boundary()
+const result = tryCatch(() => JSON.parse(data))
+```
+
+## Subpath Exports
+
+Import specific modules directly:
+
+```js
+import { ErrorBoundary } from 'errs/boundary'
+import { format } from 'errs/format'
+```
+
+## Use Cases
+
+### Form Validation
+
+```js
+const boundary = errs.boundary()
+
+if (!email.includes('@')) {
+  boundary.add(new Error('Invalid email'))
+}
+if (password.length < 8) {
+  boundary.add(new Error('Password too short'))
+}
+
+boundary.throwIfErrors('Validation failed')
+```
+
+### Batch Processing
+
+```js
+const boundary = errs.boundary()
+
+for (const item of items) {
+  try {
+    await processItem(item)
+  } catch (err) {
+    boundary.add(err)
+  }
+}
+
+if (boundary.hasErrors()) {
+  console.error(`${boundary.count} items failed`)
+  await logErrors(boundary.errors)
+}
+```
+
+### API Error Formatting
+
+```js
+app.use((err, req, res, next) => {
+  res.status(err.status || 500).send(
+    errs.format(err, { format: 'json' })
+  )
+})
+```
+
+## Requirements
+
+- Node.js >= 20.0.0
+
+## Migration from v0.x
+
+See [MIGRATION.md](./MIGRATION.md) for detailed migration guide.
+
+## License
+
+MIT
+
+## Contributors
+
+- [Charlie Robbins](http://github.com/indexzero)
+- [Nuno Job](http://github.com/dscape)

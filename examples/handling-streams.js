@@ -1,14 +1,24 @@
-var fs = require('fs'),
-    errs = require('../lib/errs');
- 
-function safeReadStream(no_such_file, callback) {
-  try { 
-    return fs.createReadStream(no_such_file, callback);
+import fs from 'node:fs'
+import errs from '../src/errs.js'
+
+// Safe stream creation that handles errors gracefully
+function safeReadStream(filename, callback) {
+  try {
+    return fs.createReadStream(filename)
   } catch (err) {
-    return errs.handle(err, callback);
+    return errs.handle(err, callback)
   }
 }
 
-// would throw, now even without a callback it gets picked as a stream
-var file = fs.createReadStream('FileDoesNotExist.here');
-file.on('error', function (err) { console.log(err); });
+// Demonstrate error handling with streams
+console.log('Demonstrating safe stream creation...')
+
+const file = safeReadStream('FileDoesNotExist.here', err => {
+  console.log('Callback received error:')
+  console.log(errs.format(err, { format: 'terminal' }))
+})
+
+file.on('error', err => {
+  console.log('Stream error handled:')
+  console.log(errs.format(err, { format: 'terminal' }))
+})

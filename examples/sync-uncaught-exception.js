@@ -1,8 +1,12 @@
-var fs = require('fs'),
-    errs = require('../lib/errs');
+import fs from 'node:fs'
+import errs from '../src/errs.js'
 
-process.on('uncaughtException', function(err) {
-  console.log(errs.merge(err, {namespace: 'uncaughtException'}));
-});
+process.on('uncaughtException', err => {
+  console.log('Caught exception:')
+  console.log(errs.merge(err, { namespace: 'uncaughtException' }))
+  console.log('\nFormatted:')
+  console.log(errs.format(err, { format: 'terminal' }))
+})
 
-var file = fs.createReadStream('FileDoesNotExist.here');
+// This will trigger the uncaughtException handler
+fs.createReadStream('FileDoesNotExist.here')
