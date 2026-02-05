@@ -1,4 +1,4 @@
-import errs from '../lib/errs.js'
+import errs from '../src/errs.js'
 
 // Example: Form Validation with Error Boundary
 console.log('--- Form Validation Example ---\n')

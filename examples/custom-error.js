@@ -1,4 +1,4 @@
-import errs from '../lib/errs.js'
+import errs from '../src/errs.js'
 
 class MyError extends Error {
   name = 'MyError'

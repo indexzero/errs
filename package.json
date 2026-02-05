@@ -5,25 +5,25 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./lib/errs.d.ts",
-      "import": "./lib/errs.js"
+      "types": "./src/errs.d.ts",
+      "import": "./src/errs.js"
     },
     "./boundary": {
-      "types": "./lib/boundary.d.ts",
-      "import": "./lib/boundary.js"
+      "types": "./src/boundary.d.ts",
+      "import": "./src/boundary.js"
     },
     "./format": {
-      "types": "./lib/format.d.ts",
-      "import": "./lib/format.js"
+      "types": "./src/format.d.ts",
+      "import": "./src/format.js"
     },
     "./package.json": "./package.json"
   },
-  "main": "./lib/errs.js",
-  "types": "./lib/errs.d.ts",
+  "main": "./src/errs.js",
+  "types": "./src/errs.d.ts",
   "files": [
-    "lib",
-    "dist",
-    "!lib/**/*.test.js"
+    "src",
+    "doc",
+    "!src/**/*.test.js"
   ],
   "scripts": {
     "test": "node --test test/**/*.test.js",
@@ -31,12 +31,12 @@
     "test:watch": "node --test --watch test/**/*.test.js",
     "test:examples": "bash test/examples.test.sh",
     "build:types": "tsc",
-    "lint": "biome lint lib test examples",
-    "lint:fix": "biome lint --write lib test examples",
-    "format": "biome format --write lib test examples",
-    "format:check": "biome format lib test examples",
-    "check": "biome check lib test examples && pnpm run build:types",
-    "check:fix": "biome check --write lib test examples",
+    "lint": "biome lint src test examples",
+    "lint:fix": "biome lint --write src test examples",
+    "format": "biome format --write src test examples",
+    "format:check": "biome format src test examples",
+    "check": "biome check src test examples && pnpm run build:types",
+    "check:fix": "biome check --write src test examples",
     "prepublishOnly": "pnpm run build:types"
   },
   "repository": {

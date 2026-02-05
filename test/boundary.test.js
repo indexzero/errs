@@ -8,7 +8,7 @@
 
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { ErrorBoundary } from '../lib/boundary.js'
+import { ErrorBoundary } from '../src/boundary.js'
 
 describe('ErrorBoundary', () => {
   describe('constructor', () => {

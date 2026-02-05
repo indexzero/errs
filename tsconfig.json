@@ -13,6 +13,6 @@
     "skipLibCheck": true,
     "outDir": "dist"
   },
-  "include": ["lib/**/*.js", "lib/**/*.d.ts"],
+  "include": ["src/**/*.js", "src/**/*.d.ts"],
   "exclude": ["node_modules", "dist", "coverage"]
 }

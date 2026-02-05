@@ -1,4 +1,4 @@
-import errs from '../lib/errs.js'
+import errs from '../src/errs.js'
 
 console.log('Transparent stack trace (no errs.js reference):')
 console.log(

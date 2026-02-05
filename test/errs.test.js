@@ -9,7 +9,7 @@
 import { strict as assert } from 'node:assert'
 import { EventEmitter } from 'node:events'
 import { describe, it } from 'node:test'
-import errs from '../lib/errs.js'
+import errs from '../src/errs.js'
 
 class NamedError extends Error {
   name = 'NamedError'

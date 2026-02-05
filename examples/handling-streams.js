@@ -1,5 +1,5 @@
 import fs from 'node:fs'
-import errs from '../lib/errs.js'
+import errs from '../src/errs.js'
 
 // Safe stream creation that handles errors gracefully
 function safeReadStream(filename, callback) {
