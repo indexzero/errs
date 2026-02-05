@@ -22,7 +22,6 @@
   "types": "./src/errs.d.ts",
   "files": [
     "src",
-    "doc",
     "!src/**/*.test.js"
   ],
   "scripts": {
