@@ -278,6 +278,42 @@ describe('errs', () => {
       assert.equal(typeof json.message, 'string')
       assert.equal(typeof json.stack, 'string')
       assert.equal(json.customProp, 'custom value')
+      assert.equal(json.name, 'Error')
+    })
+
+    it("includes an AggregateError's collected errors", () => {
+      const boundary = errs.boundary({ captureStack: false })
+      boundary.add(new Error('a'))
+      boundary.add(new TypeError('b'))
+
+      const json = errs.toJSON(boundary.toAggregateError('two failed'))
+
+      assert.equal(json.errors.length, 2)
+      assert.equal(json.errors[0].name, 'Error')
+      assert.equal(json.errors[0].message, 'a')
+      assert.equal(json.errors[1].name, 'TypeError')
+    })
+
+    it('includes a non-enumerable cause', () => {
+      const error = new Error('outer', { cause: new Error('inner') })
+      const json = errs.toJSON(error)
+
+      assert.equal(json.cause.message, 'inner')
+    })
+
+    it('survives a circular cause', () => {
+      const error = new Error('loop')
+      error.cause = error
+
+      const json = errs.toJSON(error)
+      assert.equal(json.cause, '[Circular]')
+      assert.doesNotThrow(() => JSON.stringify(json))
+    })
+
+    it('omits cause and errors when absent', () => {
+      const json = errs.toJSON(new Error('plain'))
+      assert.equal('cause' in json, false)
+      assert.equal('errors' in json, false)
     })
   })
 
@@ -593,6 +629,7 @@ describe('errs', () => {
     it('is always async, so a forgotten await destructures loudly', () => {
       assert.throws(
         () => {
+          // biome-ignore lint/plugin: destructuring the array is the behaviour under test
           const [value] = errs.trap(() => 1)
           return value
         },

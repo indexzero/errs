@@ -6,7 +6,7 @@
  *
  */
 
-import { ErrorBoundary } from './boundary.js'
+import { ErrorBoundary, makeIterable } from './boundary.js'
 import { fail, normalize, ok } from './result.js'
 
 /**
@@ -143,16 +143,28 @@ export class ErrorGroup {
 
     this.#detach?.()
 
-    if (this.#boundary.hasErrors()) {
-      const count = this.#boundary.count
-      const label = count === 1 ? 'task' : 'tasks'
-      const aggregate = this.#boundary.toAggregateError(
-        `${count} of ${this.#tasks.length} ${label} failed`
-      )
-      return fail(/** @type {AggregateError} */ (aggregate))
+    // Count from the per-task Results, not from the boundary. A boundary at
+    // its maxErrors cap silently discards further errors, so boundary.count
+    // would under-report how many tasks actually failed.
+    const failed = this.#results.filter(result => result && !result.ok).length
+    if (failed === 0) {
+      return ok(this.#results.map(result => result.value))
     }
 
-    return ok(this.#results.map(result => result.value))
+    const collected = this.#boundary.count
+    const total = this.#tasks.length
+    const label = total === 1 ? 'task' : 'tasks'
+    let message = `${failed} of ${total} ${label} failed`
+    if (collected < failed) {
+      message += `, ${collected} collected (boundary is at its maxErrors limit)`
+    }
+
+    // toAggregateError returns null on an empty boundary, which happens when
+    // maxErrors is 0. The group still has to report the failure.
+    const aggregate =
+      this.#boundary.toAggregateError(message) ?? makeIterable(new AggregateError([], message))
+
+    return fail(aggregate)
   }
 
   /**

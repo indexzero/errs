@@ -127,7 +127,7 @@ export function parallel<T>(
  * @param error - The error to convert
  * @returns JSON representation of the error
  */
-export function toJSON(error: Error): Record<string, unknown>
+export function toJSON(error: Error, seen?: WeakSet<object>): Record<string, unknown>
 
 /**
  * Type guard: checks if error is instance of ErrorClass

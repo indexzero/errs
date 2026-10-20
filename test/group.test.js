@@ -80,7 +80,7 @@ describe('ErrorGroup', () => {
       })
       group.run(async () => 'fast')
 
-      const [values] = await group.wait()
+      const { value: values } = await group.wait()
       assert.deepEqual(values, ['slow', 'fast'])
     })
 
@@ -127,7 +127,47 @@ describe('ErrorGroup', () => {
       })
 
       const [, error] = await group.wait()
-      assert.match(error.message, /1 of 2 task failed/)
+      assert.match(error.message, /1 of 2 tasks failed/)
+    })
+
+    it('counts failed tasks, not collected errors, when maxErrors caps the boundary', async () => {
+      const group = new ErrorGroup({ maxErrors: 2 })
+      for (let i = 0; i < 5; i += 1) {
+        group.run(async () => {
+          throw new Error(`fail ${i}`)
+        })
+      }
+
+      const [, error] = await group.wait()
+
+      assert.match(error.message, /5 of 5 tasks failed/)
+      assert.match(error.message, /2 collected/)
+      assert.equal([...error].length, 2)
+      assert.equal(group.results.filter(result => !result.ok).length, 5)
+    })
+
+    it('still reports failure when maxErrors is 0 and nothing was collected', async () => {
+      const group = new ErrorGroup({ maxErrors: 0 })
+      group.run(async () => {
+        throw new Error('swallowed by the cap')
+      })
+
+      const [values, error] = await group.wait()
+
+      assert.equal(values, undefined)
+      assert(error instanceof AggregateError)
+      assert.deepEqual([...error], [])
+      assert.match(error.message, /1 of 1 task failed, 0 collected/)
+    })
+
+    it('omits the cap note when nothing was truncated', async () => {
+      const group = new ErrorGroup({ maxErrors: 10 })
+      group.run(async () => {
+        throw new Error('one')
+      })
+
+      const [, error] = await group.wait()
+      assert.equal(error.message, '1 of 1 task failed')
     })
 
     it('normalizes a non-Error throw', async () => {
@@ -149,7 +189,7 @@ describe('ErrorGroup', () => {
         return 'outer'
       })
 
-      const [values] = await group.wait()
+      const { value: values } = await group.wait()
       assert.deepEqual(values, ['outer', 'nested'])
     })
   })
@@ -335,6 +375,49 @@ describe('ErrorGroup', () => {
 
       await group.wait()
       assert.equal(started, 1)
+    })
+  })
+
+  describe('documented edges', () => {
+    it('swallows failures silently if the group is never waited on', async () => {
+      // Tasks never reject, so there is no unhandled rejection to alert you.
+      // A group you do not wait on is a group whose errors you do not see.
+      const group = new ErrorGroup()
+      group.run(async () => {
+        throw new Error('never surfaced')
+      })
+
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      assert.equal(group.boundary.count, 1)
+      assert.equal(group.results[0].ok, false)
+    })
+
+    it('runs a task added after wait() resolved, and a second wait() sees it', async () => {
+      const group = new ErrorGroup()
+      group.run(async () => 'first')
+
+      const first = await group.wait()
+      assert.deepEqual(first.value, ['first'])
+
+      group.run(async () => {
+        throw new Error('after the fact')
+      })
+      await new Promise(resolve => setTimeout(resolve, 10))
+
+      const second = await group.wait()
+      assert.equal(second.ok, false)
+      assert.match(second.error.message, /1 of 2 tasks failed/)
+    })
+
+    it('is idempotent across repeated wait() calls when nothing changed', async () => {
+      const group = new ErrorGroup()
+      group.run(async () => 'only')
+
+      const first = await group.wait()
+      const second = await group.wait()
+
+      assert.deepEqual(first.value, second.value)
     })
   })
 

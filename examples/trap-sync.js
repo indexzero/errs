@@ -19,6 +19,7 @@ console.log('with fallback    ->', withDefault, '|', stillErr?.message)
 // Promises are not iterable, so array destructuring throws instead of
 // quietly handing you undefined for every slot.
 try {
+  // biome-ignore lint/plugin: destructuring the array is exactly what throws here
   const [oops] = errs.trap(() => 1)
   console.log('unreachable', oops)
 } catch (e) {

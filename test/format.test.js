@@ -48,6 +48,65 @@ describe('format', () => {
     })
   })
 
+  describe('terminal format with collected errors', () => {
+    it("lists an AggregateError's collected errors", () => {
+      const aggregate = new AggregateError(
+        [new Error('first'), new TypeError('second')],
+        'two failed'
+      )
+      const output = format(aggregate, { format: 'terminal', colors: false })
+
+      assert.match(output, /├─ 2 errors collected:/)
+      assert.match(output, /1\. Error: first/)
+      assert.match(output, /2\. TypeError: second/)
+      assert.match(output, /╰─ 1 error in chain, 2 collected/)
+    })
+
+    it('uses the singular for a lone collected error', () => {
+      const output = format(new AggregateError([new Error('only')], 'one failed'), {
+        format: 'terminal',
+        colors: false
+      })
+      assert.match(output, /├─ 1 error collected:/)
+      assert.match(output, /╰─ 1 error in chain, 1 collected/)
+    })
+
+    it('shows collected errors alongside a cause chain', () => {
+      const aggregate = new AggregateError([new Error('a'), new Error('b')], 'failed')
+      aggregate.cause = new Error('root')
+
+      const output = format(aggregate, { format: 'terminal', colors: false })
+      assert.match(output, /├─ 2 errors collected:/)
+      assert.match(output, /├─ Caused by: Error: root/)
+      assert.match(output, /╰─ 2 errors in chain, 2 collected/)
+    })
+
+    it('notes nested aggregates without expanding them', () => {
+      const inner = new AggregateError([new Error('x'), new Error('y')], 'inner')
+      const output = format(new AggregateError([inner, new Error('z')], 'outer'), {
+        format: 'terminal',
+        colors: false
+      })
+
+      assert.match(output, /1\. AggregateError: inner \(\+2 nested\)/)
+      assert.match(output, /2\. Error: z/)
+    })
+
+    it('leaves the output of a plain error unchanged', () => {
+      const output = format(new Error('solo'), { format: 'terminal', colors: false })
+      assert.match(output, /╰─ 1 error in chain$/)
+      assert.equal(output.includes('collected'), false)
+    })
+
+    it('renders an empty errors array as no collected section', () => {
+      const output = format(new AggregateError([], 'none'), {
+        format: 'terminal',
+        colors: false
+      })
+      assert.equal(output.includes('collected'), false)
+    })
+  })
+
   describe('json format', () => {
     it('formats simple error', () => {
       const err = new Error('Test error')

@@ -48,6 +48,7 @@ function formatTerminal(error, { colors }) {
   const lines = []
   let current = error
   let depth = 0
+  let collected = 0
 
   while (current) {
     const prefix = depth === 0 ? '╭─' : '├─ Caused by:'
@@ -62,11 +63,37 @@ function formatTerminal(error, { colors }) {
       lines.push('│')
     }
 
+    // An AggregateError's siblings live on `errors`, which is a different
+    // axis from `cause`: a flat list of what failed, not a chain of why.
+    // List them one per line rather than walking each one's own chain,
+    // which would bury the summary under dozens of stack frames.
+    const siblings = Array.isArray(current.errors) ? current.errors : []
+    if (siblings.length > 0) {
+      collected += siblings.length
+      const label = siblings.length === 1 ? 'error' : 'errors'
+      lines.push(style(`├─ ${siblings.length} ${label} collected:`, 'red'))
+
+      const width = String(siblings.length).length
+      for (const [index, sibling] of siblings.entries()) {
+        const number = String(index + 1).padStart(width, ' ')
+        const name = sibling?.name ?? 'Error'
+        const message = sibling?.message ?? String(sibling)
+        const nested = Array.isArray(sibling?.errors) ? sibling.errors.length : 0
+        const suffix = nested > 0 ? style(` (+${nested} nested)`, 'gray') : ''
+        lines.push(`│  ${number}. ${style(`${name}: ${message}`, 'red')}${suffix}`)
+      }
+      lines.push('│')
+    }
+
     current = current.cause
     depth++
   }
 
-  lines.push(`╰─ ${depth} error${depth > 1 ? 's' : ''} in chain`)
+  const footer = [`${depth} error${depth > 1 ? 's' : ''} in chain`]
+  if (collected > 0) {
+    footer.push(`${collected} collected`)
+  }
+  lines.push(`╰─ ${footer.join(', ')}`)
   return lines.join('\n')
 }
 

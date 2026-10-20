@@ -31,7 +31,8 @@ if (b.hasErrors()) {
     console.log(`  ${i + 1}. ${e.message}`)
   }
 
-  console.log(`\n${errs.format(aggregate, { format: 'json', indent: 2 })}`)
+  // Terminal format lists the collected errors under the box header.
+  console.log(`\n${errs.format(aggregate, { format: 'terminal', colors: false })}`)
 
   // Or let it throw at the boundary of your unit of work:
   //   b.throwIfErrors(`${b.count} rows failed to parse`)

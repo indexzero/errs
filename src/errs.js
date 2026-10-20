@@ -257,8 +257,17 @@ async function parallel(tasks, options = {}) {
  * @param {Error} error - The error to convert
  * @returns {object} JSON representation of the error
  */
-function toJSON(error) {
+function toJSON(error, seen = new WeakSet()) {
+  if (error == null || typeof error !== 'object') {
+    return error
+  }
+  if (seen.has(error)) {
+    return '[Circular]'
+  }
+  seen.add(error)
+
   const obj = {
+    name: error.name,
     message: error.message,
     stack: error.stack,
     arguments: error.arguments,
@@ -269,6 +278,16 @@ function toJSON(error) {
     if (!(key in obj)) {
       obj[key] = error[key]
     }
+  }
+
+  // `cause` and an AggregateError's `errors` are the two axes an error can
+  // branch along, and both are non-enumerable when set by the constructor,
+  // so the Object.keys() copy above misses them.
+  if (error.cause != null) {
+    obj.cause = toJSON(error.cause, seen)
+  }
+  if (Array.isArray(error.errors)) {
+    obj.errors = error.errors.map(nested => toJSON(nested, seen))
   }
 
   return obj

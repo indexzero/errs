@@ -20,9 +20,11 @@ console.log('tagged ->', res.ok, '|', res.ok ? res.value : res.error.message)
 
 // trap() takes sync fns, async fns, and plain promise-returning fns.
 // Detection looks at what fn returned, not at what fn is.
-const [a] = await errs.trap(() => 42)
-const [b] = await errs.trap(async () => 'from async fn')
-const [c] = await errs.trap(() => Promise.resolve('from plain fn'))
+// Reading `.value` rather than the tuple says that the error is genuinely
+// uninteresting here, which keeps the lint rule quiet for the right reason.
+const { value: a } = await errs.trap(() => 42)
+const { value: b } = await errs.trap(async () => 'from async fn')
+const { value: c } = await errs.trap(() => Promise.resolve('from plain fn'))
 console.log('\naccepts ->', a, '|', b, '|', c)
 
 // Anything thrown that is not an Error gets normalized to one.

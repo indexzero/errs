@@ -362,13 +362,13 @@ describe('ErrorBoundary', () => {
 
     it('awaits a plain function returning a promise', async () => {
       const boundary = new ErrorBoundary()
-      const [value] = await boundary.trap(() => Promise.resolve('plain'))
+      const { value } = await boundary.trap(() => Promise.resolve('plain'))
       assert.equal(value, 'plain')
     })
 
     it('accepts a synchronous function too', async () => {
       const boundary = new ErrorBoundary()
-      const [value] = await boundary.trap(() => 'sync')
+      const { value } = await boundary.trap(() => 'sync')
       assert.equal(value, 'sync')
     })
 
@@ -390,6 +390,7 @@ describe('ErrorBoundary', () => {
       const boundary = new ErrorBoundary()
       assert.throws(
         () => {
+          // biome-ignore lint/plugin: destructuring the array is the behaviour under test
           const [value] = boundary.trap(() => 1)
           return value
         },
@@ -436,7 +437,7 @@ describe('ErrorBoundary', () => {
 
     it('leaves the value slot undefined on failure without or', () => {
       const boundary = new ErrorBoundary()
-      const [value] = boundary.trapSync(() => {
+      const { value } = boundary.trapSync(() => {
         throw new Error('bad')
       })
       assert.equal(value, undefined)

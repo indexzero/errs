@@ -242,6 +242,37 @@ With `cancelOnError`, the abort reason is an Error named `AbortError` whose
 `cause` is the original failure, so siblings report why they stopped instead of
 repeating the root error.
 
+Two edges worth knowing. A group you never `wait()` on **swallows every failure
+silently**: tasks never reject, so there is no unhandled rejection to alert you.
+And calling `run()` after `wait()` has resolved runs the task anyway, with
+nobody awaiting it; a later `wait()` will pick it up.
+
+If the boundary hits its `maxErrors` cap, the aggregate is truncated but the
+failure count is not: it comes from the per-task results, and the message says
+how many were actually collected.
+
+### Enforcing the check
+
+The one way a tuple is weaker than the throw it replaces is that nothing makes
+you look at the error. Go leans on its compiler, where an unused variable is a
+build failure. This repo ships the missing half as a Biome plugin:
+
+```json
+{ "plugins": ["./plugins/no-dropped-error.grit"] }
+```
+
+It flags the slot being dropped outright, which no generic rule can see because
+there is no unused binding left to complain about:
+
+```js
+const [res] = await errs.trap(fn)  // error silently swallowed -> flagged
+```
+
+Biome's built-in `noUnusedVariables` already covers the other half, where the
+error is destructured and then never read. Read `.value` instead of taking a
+one-element tuple to say that you meant to ignore it, or suppress with a reason
+via `// biome-ignore lint/plugin:`.
+
 #### Reading the failures
 
 Three ways, none of which need `.errors`:

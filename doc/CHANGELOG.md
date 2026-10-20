@@ -40,6 +40,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and `signal` apply. Started promises still work and keep the v1 return shape
   but warn once, because neither option can apply to work already in flight.
 
+### Fixed
+
+- Terminal format now renders an `AggregateError`'s collected errors as an
+  indented list, instead of walking only `cause` and leaving them invisible.
+  The footer reports both chain depth and collected count.
+- `toJSON()` now includes `errors` and `cause`, which are non-enumerable when
+  set by the constructor and so were missed by the enumerable-key copy. Adds a
+  cycle guard and the error's `name`.
+- `group().wait()` counts failed tasks from its own per-task results rather
+  than from `boundary.count`, which under-reported when the boundary was at its
+  `maxErrors` cap. It also still reports failure when `maxErrors` is 0.
+
+### Added
+
+- `plugins/no-dropped-error.grit`, a Biome plugin flagging a Result whose error
+  slot is dropped outright, which `noUnusedVariables` cannot see
+
 ### Deprecated
 
 - `boundary.trapAsync(fn)` - alias of `trap()`

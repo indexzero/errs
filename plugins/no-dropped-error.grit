@@ -1,0 +1,36 @@
+// no-dropped-error.grit: flag a Result whose error slot is thrown away.
+//
+// The one way the tuple is genuinely weaker than the throw it replaces is
+// that nothing makes you look at the error. Go leans on the compiler, where
+// an unused variable is a build failure. JavaScript has no equivalent, so
+// this plugin supplies the missing half.
+//
+// Biome's own noUnusedVariables already covers the case where the error IS
+// destructured and then never read:
+//
+//   const [res, err] = await errs.trap(fn)   // err unused -> noUnusedVariables
+//
+// What it cannot see is the slot being dropped outright, because then there
+// is no unused binding to complain about. That is this rule:
+//
+//   const [res] = await errs.trap(fn)        // error silently swallowed
+//
+// Suppress with a reason when you really do not want it:
+//
+//   // biome-ignore lint/plugin: value is all we need here
+language js
+
+`const [$only] = $init` where {
+  $init <: or { `await $fn($...)`, `$fn($...)` },
+  $fn <: or {
+    r"(?:.*\.)?trap",
+    r"(?:.*\.)?trapSync",
+    r"(?:.*\.)?trapAsync",
+    r"(?:.*\.)?wait"
+  },
+  register_diagnostic(
+    span = $only,
+    message = "The error slot of this Result is dropped. Destructure it as [value, error] and check it, or read `.value` to say that you meant to ignore it.",
+    severity = "error"
+  )
+}
