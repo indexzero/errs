@@ -174,7 +174,10 @@ if (err) return [undefined, err]
 `trap()` always returns a Promise, whether `fn` is sync, async, or a plain
 function returning a promise. The synchronous door is a separate method rather
 than a second return shape, so there is no sync-or-async return to guess at.
-A forgotten `await` throws a TypeError on destructuring rather than going quiet.
+A forgotten `await` throws a TypeError **if you destructure the tuple**, because
+promises are not iterable. The other two readings stay quiet: `.ok` and `.value`
+on a promise are both `undefined`, which reads as a failure that never happened.
+That is a reason to prefer the tuple at call sites you are migrating.
 
 ```js
 const [config, err] = errs.trapSync(() => JSON.parse(raw))
@@ -232,7 +235,9 @@ const [users, err] = await g.wait()
 if (err) throw err  // AggregateError carrying every failure
 ```
 
-Options are `limit`, `signal`, `cancelOnError`, and `boundary`. `run()` hands
+Options are `limit`, `signal`, `cancelOnError`, and `boundary`, plus
+`maxErrors` and `captureStack`, which are passed to a boundary the group
+creates for itself. `run()` hands
 each thunk the group's signal, so forwarding it is the caller's job: a thunk
 that ignores it cannot be cancelled. `wait()` keeps strict Result semantics, so
 its value slot is `undefined` when anything failed; per-task outcomes live on
@@ -242,10 +247,16 @@ With `cancelOnError`, the abort reason is an Error named `AbortError` whose
 `cause` is the original failure, so siblings report why they stopped instead of
 repeating the root error.
 
+The aggregate from `wait()` holds this group's failures only, even when the
+boundary is shared with another group, pre-filled, cleared, or at its
+`maxErrors` cap. The boundary accumulates across groups; the aggregate answers
+"what did my tasks do".
+
 Two edges worth knowing. A group you never `wait()` on **swallows every failure
 silently**: tasks never reject, so there is no unhandled rejection to alert you.
 And calling `run()` after `wait()` has resolved runs the task anyway, with
-nobody awaiting it; a later `wait()` will pick it up.
+nobody awaiting it; a later `wait()` will pick it up, and the configured
+external signal still applies.
 
 If the boundary hits its `maxErrors` cap, the aggregate is truncated but the
 failure count is not: it comes from the per-task results, and the message says
@@ -255,10 +266,10 @@ how many were actually collected.
 
 The one way a tuple is weaker than the throw it replaces is that nothing makes
 you look at the error. Go leans on its compiler, where an unused variable is a
-build failure. This repo ships the missing half as a Biome plugin:
+build failure. The package ships the missing half as a Biome plugin:
 
 ```json
-{ "plugins": ["./plugins/no-dropped-error.grit"] }
+{ "plugins": ["./node_modules/errs/plugins/no-dropped-error.grit"] }
 ```
 
 It flags the slot being dropped outright, which no generic rule can see because
@@ -271,7 +282,11 @@ const [res] = await errs.trap(fn)  // error silently swallowed -> flagged
 Biome's built-in `noUnusedVariables` already covers the other half, where the
 error is destructured and then never read. Read `.value` instead of taking a
 one-element tuple to say that you meant to ignore it, or suppress with a reason
-via `// biome-ignore lint/plugin:`.
+via `// biome-ignore lint/plugin:` on the line above.
+
+It covers `const`, `let` and `var`. It deliberately does not flag a bare
+`wait()` or an unrelated `mutex.wait()`, so a group held in a variable whose
+name has no `g`/`group` prefix goes unchecked.
 
 #### Reading the failures
 
@@ -478,10 +493,7 @@ import {
   pick,
   isErrorType,
   isRegisteredType,
-  assertErrorType,
-  trap,
-  trapSync,
-  group
+  assertErrorType
 } from 'errs'
 
 const err = create('Error message')
@@ -548,7 +560,7 @@ app.use((err, req, res, next) => {
 
 ## Requirements
 
-- Node.js >= 20.0.0
+- Node.js >= 22.0.0
 
 ## Migration from v0.x
 

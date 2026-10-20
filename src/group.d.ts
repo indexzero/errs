@@ -1,5 +1,5 @@
 import { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
-import { Result } from './result.js'
+import { AggregateResult, Result } from './result.js'
 
 /**
  * Options for creating an ErrorGroup
@@ -55,9 +55,10 @@ export class ErrorGroup {
   readonly boundary: ErrorBoundary
 
   /**
-   * Per-task Results in run order. Use this for partial results, since
-   * wait() keeps strict Result semantics and leaves its value slot
-   * undefined when anything failed.
+   * Results of the tasks that have settled, in run order.
+   *
+   * Tasks still in flight are omitted rather than appearing as `undefined`,
+   * so the array is always dense but may be shorter than `size`.
    */
   readonly results: Result<unknown>[]
 
@@ -78,5 +79,5 @@ export class ErrorGroup {
    * @returns Result whose value is every task's value in run order, or
    *   whose error is an AggregateError of every failure
    */
-  wait(): Promise<Result<unknown[]>>
+  wait(): Promise<AggregateResult<unknown[]>>
 }

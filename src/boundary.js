@@ -10,7 +10,7 @@ import { fail, normalize, ok } from './result.js'
 
 /**
  * @template T
- * @typedef {[T|undefined, Error|undefined] & ({ ok: true, value: T, error: undefined } | { ok: false, value: T|undefined, error: Error })} Result
+ * @typedef {([T, undefined] & { ok: true, value: T, error: undefined }) | ([T|undefined, Error] & { ok: false, value: T|undefined, error: Error })} Result
  */
 
 /**
@@ -24,7 +24,12 @@ import { fail, normalize, ok } from './result.js'
  * @returns {T} The same aggregate, now iterable
  */
 export function makeIterable(aggregate) {
-  if (typeof aggregate?.[Symbol.iterator] === 'function') return aggregate
+  if (aggregate == null) return aggregate
+  const existing = /** @type {{ [Symbol.iterator]?: unknown }} */ (
+    /** @type {unknown} */ (aggregate)
+  )[Symbol.iterator]
+  if (typeof existing === 'function') return aggregate
+  if (!Object.isExtensible(aggregate)) return aggregate
   Object.defineProperty(aggregate, Symbol.iterator, {
     value: function* () {
       yield* this.errors ?? []
@@ -40,6 +45,7 @@ export function makeIterable(aggregate) {
  * ErrorBoundary - Collects errors without immediate throwing
  */
 export class ErrorBoundary {
+  /** @type {Error[]} */
   #errors = []
   #options
   #createdAt
@@ -171,7 +177,19 @@ export class ErrorBoundary {
    */
   trapSync(fn, options = {}) {
     try {
-      return ok(fn())
+      const value = fn()
+      // A thenable here means trapSync() was handed an async function. The
+      // sync door cannot await it, and returning ok:true with a pending
+      // promise in the value slot would let the real rejection escape as an
+      // unhandledRejection. Swallow the rejection so it cannot crash the
+      // process, and report the API misuse, which is the actual bug.
+      if (typeof (/** @type {{ then?: unknown }} */ (value).then) === 'function') {
+        Promise.resolve(value).catch(() => {})
+        throw new TypeError(
+          'trapSync() received a function that returned a promise. Use trap(), which awaits.'
+        )
+      }
+      return ok(value)
     } catch (error) {
       const normalized = normalize(error)
       this.add(normalized)

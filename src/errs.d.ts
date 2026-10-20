@@ -1,12 +1,14 @@
 import { EventEmitter } from 'node:events'
 import { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
 import { ErrorGroup, ErrorGroupOptions } from './group.js'
+// ErrorGroup itself is intentionally not re-exported from the root: use
+// `errs.group()` for an instance, or import the class from 'errs/group'.
 import { Result, TrapOptions } from './result.js'
 import { format } from './format.js'
 
 export { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
-export { ErrorGroup, ErrorGroupOptions } from './group.js'
-export { Result, TrapOptions } from './result.js'
+export type { ErrorGroupOptions } from './group.js'
+export type { AggregateResult, Result, TrapOptions } from './result.js'
 export { format, FormatOptions } from './format.js'
 
 /**
@@ -213,7 +215,7 @@ export function tryCatchAsync<T>(fn: () => Promise<T>): Promise<Result<T>>
  * const { TimeoutError = [], NotFoundError = [] } = errs.byName(aggregate)
  */
 export function byName(
-  input: AggregateError | Iterable<Error> | Error[] | Error | null | undefined
+  input: AggregateError | ErrorBoundary | Iterable<Error> | Error[] | Error | null | undefined
 ): Record<string, Error[]>
 
 /**
@@ -224,7 +226,7 @@ export function byName(
  * @returns Matching errors, in encounter order
  */
 export function pick<E extends Error>(
-  input: AggregateError | Iterable<Error> | Error[] | Error | null | undefined,
+  input: AggregateError | ErrorBoundary | Iterable<Error> | Error[] | Error | null | undefined,
   ErrorClass: new (...args: never[]) => E
 ): E[]
 

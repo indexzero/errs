@@ -13,8 +13,9 @@
  * Order is value first, error last, following Go rather than Node's
  * error-first callback convention.
  */
-export type Result<T> = [T | undefined, Error | undefined] &
-  ({ ok: true; value: T; error: undefined } | { ok: false; value: T | undefined; error: Error })
+export type Result<T, E extends Error = Error> =
+  | ([T, undefined] & { ok: true; value: T; error: undefined })
+  | ([T | undefined, E] & { ok: false; value: T | undefined; error: E })
 
 /**
  * Options accepted by trap() and trapSync()
@@ -42,6 +43,11 @@ export function normalize(error: unknown): Error
  * @param error - The error, if any
  */
 export function result<T>(ok: boolean, value: T | undefined, error: Error | undefined): Result<T>
+
+/**
+ * A Result whose error, when present, is an iterable AggregateError
+ */
+export type AggregateResult<T> = Result<T, AggregateError & Iterable<Error>>
 
 /**
  * Builds a successful Result

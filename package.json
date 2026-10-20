@@ -30,7 +30,8 @@
   "types": "./src/errs.d.ts",
   "files": [
     "src",
-    "!src/**/*.test.js"
+    "!src/**/*.test.js",
+    "plugins"
   ],
   "scripts": {
     "test": "node --test test/**/*.test.js",
@@ -38,6 +39,7 @@
     "test:watch": "node --test --watch test/**/*.test.js",
     "test:examples": "bash test/examples.test.sh",
     "build:types": "tsc",
+    "check:js": "tsc -p tsconfig.check.json",
     "lint": "biome lint src test examples",
     "lint:fix": "biome lint --write src test examples",
     "format": "biome format --write src test examples",

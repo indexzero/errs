@@ -239,4 +239,54 @@ describe('format', () => {
       assert.match(output, /╰─/)
     })
   })
+  describe('hostile inputs', () => {
+    it('does not hang or crash on a circular cause', () => {
+      const a = new Error('a')
+      const b = new Error('b', { cause: a })
+      a.cause = b
+
+      for (const fmt of ['terminal', 'json', 'html']) {
+        assert.doesNotThrow(() => format(a, { format: fmt, colors: false }))
+      }
+      assert.match(format(a, { format: 'terminal', colors: false }), /2 errors in chain/)
+    })
+
+    it('renders a non-Error cause', () => {
+      const output = format(new Error('top', { cause: 'just a string' }), {
+        format: 'terminal',
+        colors: false
+      })
+      assert.match(output, /Caused by: just a string/)
+    })
+
+    it('renders aggregate members that are not Errors', () => {
+      const aggregate = new AggregateError(
+        [null, undefined, 'a string', 42, Object.create(null)],
+        'mixed'
+      )
+
+      const output = format(aggregate, { format: 'terminal', colors: false })
+      assert.match(output, /5 errors collected:/)
+      assert.match(output, /1\. null/)
+      assert.match(output, /2\. undefined/)
+      assert.match(output, /3\. a string/)
+      assert.match(output, /4\. 42/)
+    })
+
+    it('json format survives null and non-object members', () => {
+      const parsed = JSON.parse(
+        format(new AggregateError([null, 'str', 7], 'mixed'), { format: 'json' })
+      )
+      assert.deepEqual(parsed.errors, [null, 'str', 7])
+    })
+
+    it('json format treats a shared reference as shared, not circular', () => {
+      const shared = new Error('shared')
+      const parsed = JSON.parse(
+        format(new AggregateError([shared, shared], 'two'), { format: 'json' })
+      )
+      assert.equal(parsed.errors[0].message, 'shared')
+      assert.equal(parsed.errors[1].message, 'shared')
+    })
+  })
 })

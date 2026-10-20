@@ -33,6 +33,49 @@ export function format(error, options = {}) {
 }
 
 /**
+ * The message of any thrown value, without assuming it is an Error
+ * @param {unknown} value - The value to read
+ * @returns {string} Its message, or a safe string form
+ */
+function messageOf(value) {
+  const named = /** @type {{ message?: unknown }} */ (value)
+  if (typeof named?.message === 'string') return named.message
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+  try {
+    return String(value)
+  } catch {
+    return Object.prototype.toString.call(value)
+  }
+}
+
+/**
+ * Describes any thrown value as `Name: message`, without assuming it is an
+ * Error. A cause or an aggregate member can be a string, a number, null, or
+ * a null-prototype object whose String() conversion throws.
+ * @param {unknown} value - The value to describe
+ * @returns {string} A single-line description
+ */
+function describe(value) {
+  if (value instanceof Error) {
+    return `${value.name}: ${value.message}`
+  }
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+
+  const named = /** @type {{ name?: unknown, message?: unknown }} */ (value)
+  if (typeof named?.name === 'string' && typeof named?.message === 'string') {
+    return `${named.name}: ${named.message}`
+  }
+
+  try {
+    return String(value)
+  } catch {
+    return Object.prototype.toString.call(value)
+  }
+}
+
+/**
  * Formats an error for terminal output with colors
  * @param {Error} error - The error to format
  * @param {object} options - Formatting options
@@ -46,13 +89,17 @@ function formatTerminal(error, { colors }) {
       : s => s
 
   const lines = []
+  const seen = new Set()
   let current = error
   let depth = 0
   let collected = 0
 
-  while (current) {
+  // A cause chain can be circular. Without this guard the loop appends
+  // forever and V8 aborts the process while it is trying to report an error.
+  while (current && !seen.has(current)) {
+    seen.add(current)
     const prefix = depth === 0 ? '╭─' : '├─ Caused by:'
-    lines.push(style(`${prefix} ${current.name}: ${current.message}`, 'red'))
+    lines.push(style(`${prefix} ${describe(current)}`, 'red'))
     lines.push('│')
 
     if (current.stack) {
@@ -76,11 +123,9 @@ function formatTerminal(error, { colors }) {
       const width = String(siblings.length).length
       for (const [index, sibling] of siblings.entries()) {
         const number = String(index + 1).padStart(width, ' ')
-        const name = sibling?.name ?? 'Error'
-        const message = sibling?.message ?? String(sibling)
         const nested = Array.isArray(sibling?.errors) ? sibling.errors.length : 0
         const suffix = nested > 0 ? style(` (+${nested} nested)`, 'gray') : ''
-        lines.push(`│  ${number}. ${style(`${name}: ${message}`, 'red')}${suffix}`)
+        lines.push(`│  ${number}. ${style(describe(sibling), 'red')}${suffix}`)
       }
       lines.push('│')
     }
@@ -105,14 +150,19 @@ function formatTerminal(error, { colors }) {
  * @returns {string} JSON string
  */
 function formatJSON(error, { indent }) {
-  const seen = new WeakSet()
+  const ancestors = new Set()
 
   function serialize(err, depth = 0) {
     if (depth > 10) return { truncated: true }
-    if (err && typeof err === 'object') {
-      if (seen.has(err)) return { circular: true }
-      seen.add(err)
+    // A non-object member of an aggregate (null, a string, a number) has no
+    // properties to read; return it verbatim rather than crashing.
+    if (err === null || typeof err !== 'object') {
+      return err
     }
+    // An ancestor stack, not a visited set: a shared reference is not a
+    // cycle, and under cancelOnError every sibling shares one AbortError.
+    if (ancestors.has(err)) return { circular: true }
+    ancestors.add(err)
 
     const obj = {
       name: err.name,
@@ -139,6 +189,7 @@ function formatJSON(error, { indent }) {
       }
     }
 
+    ancestors.delete(err)
     return obj
   }
 
@@ -154,12 +205,16 @@ function formatHTML(error) {
   const escapeHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   let html = '<div class="error-chain">\n'
+  const seen = new Set()
   let current = error
 
-  while (current) {
+  // Same cycle guard as the terminal walker: a circular cause would grow this
+  // string until the process aborts.
+  while (current && !seen.has(current)) {
+    seen.add(current)
     html += '  <div class="error">\n'
-    html += `    <h3 class="error-name">${escapeHtml(current.name)}</h3>\n`
-    html += `    <p class="error-message">${escapeHtml(current.message)}</p>\n`
+    html += `    <h3 class="error-name">${escapeHtml(String(current?.name ?? 'Error'))}</h3>\n`
+    html += `    <p class="error-message">${escapeHtml(messageOf(current))}</p>\n`
     if (current.stack) {
       html += `    <pre class="error-stack">${escapeHtml(current.stack)}</pre>\n`
     }

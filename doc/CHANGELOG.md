@@ -42,6 +42,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `toJSON()` no longer takes a `seen` parameter in its public signature, which
+  made `errors.map(errs.toJSON)` pass the array index as the cycle guard and
+  throw. The guard is now an internal ancestor stack.
+- `toJSON()` and `format(..., 'json')` no longer report a shared reference as
+  `[Circular]`. They tracked visited values rather than ancestors, so any DAG
+  looked circular. This mattered most under `cancelOnError`, where every
+  sibling rejects with the same AbortError whose cause is the root failure.
+- `byName()` uses a null-prototype record, so an error named `constructor`,
+  `toString` or `hasOwnProperty` no longer throws.
+- `group().wait()` counts and aggregates from the group's own failures rather
+  than the boundary, which may be shared, pre-filled, cleared, or capped. A
+  shared boundary could previously drop a group's failure silently.
+- An external `signal` keeps working after the first `wait()`. The listener was
+  detached there, silently disconnecting a reused group from its signal. A
+  `WeakRef` plus a `FinalizationRegistry` now lets an un-waited group be
+  collected and removes its listener, instead of pinning it to the signal.
+- `normalize()` no longer throws on a value whose `String()` conversion throws,
+  such as a null-prototype object. Thrown from inside a catch block, it escaped
+  as an unhandled rejection and could end the process.
+- `trapSync()` refuses a function that returns a promise instead of reporting
+  success with a pending promise in the value slot and letting the rejection
+  escape.
+- Terminal and HTML formats no longer grow without bound on a circular `cause`,
+  which aborted the process. All three walkers now guard.
+- `format()` renders non-Error causes and non-Error aggregate members instead of
+  printing `undefined: undefined` or throwing.
+- `parallel()` attaches a no-op handler to already-started promises before
+  refusing mixed input, so the argument error is what surfaces.
+- `group()` rejects a non-integer `limit`; `1.5` previously allowed two in
+  flight.
+- `results` omits tasks still in flight rather than exposing `undefined` holes
+  under a type promising dense Results.
+- `Result<T>` correlates its tuple halves, so `const [v, e] = ...; if (e)
+  return; v.x` narrows under `strict`. `wait()` is typed as an iterable
+  AggregateError, `byName()`/`pick()` accept an ErrorBoundary, and the root
+  `ErrorGroup` type export, which had no runtime counterpart, is gone.
+- `.gitignore` had `.DS_Store` and `dist/` merged onto one line, so neither was
+  ignored.
 - Terminal format now renders an `AggregateError`'s collected errors as an
   indented list, instead of walking only `cause` and leaving them invisible.
   The footer reports both chain depth and collected count.
@@ -55,7 +93,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `plugins/no-dropped-error.grit`, a Biome plugin flagging a Result whose error
-  slot is dropped outright, which `noUnusedVariables` cannot see
+  slot is dropped outright, which `noUnusedVariables` cannot see. Covers
+  `const`, `let` and `var`, and is now shipped in the package.
+- `check:js` script and `tsconfig.check.json`, which actually typecheck the
+  JSDoc in `src/*.js`. The main config cannot: a sibling `.d.ts` exists for
+  every `.js`, so TypeScript drops the `.js` from the program and `checkJs`
+  silently does nothing. 53 pre-existing errors in `errs.js` and `format.js`
+  remain, so it is not yet wired into `check`.
 
 ### Deprecated
 

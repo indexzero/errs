@@ -1,0 +1,17 @@
+{
+  "//": "Checks the JSDoc in src/*.js. The main tsconfig cannot: a sibling .d.ts exists for every .js, so TypeScript drops the .js from the program and checkJs silently does nothing.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "exactOptionalPropertyTypes": true,
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "target": "es2024",
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.js"],
+  "exclude": ["node_modules", "dist", "coverage", "src/**/*.d.ts"]
+}

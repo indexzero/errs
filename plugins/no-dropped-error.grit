@@ -15,18 +15,27 @@
 //
 //   const [res] = await errs.trap(fn)        // error silently swallowed
 //
-// Suppress with a reason when you really do not want it:
+// Suppress with a reason when you really do not want it, on the line above:
 //
 //   // biome-ignore lint/plugin: value is all we need here
+//
+// Scope: this matches `trap`, `trapSync`, `trapAsync` and `errs`-rooted
+// `wait` calls. A bare `wait()` or `mutex.wait()` is not an errs Result, so
+// those are deliberately left alone; the cost is that a group held in a
+// variable named something other than a `g`/`group` prefix is not checked.
 language js
 
-`const [$only] = $init` where {
-  $init <: or { `await $fn($...)`, `$fn($...)` },
-  $fn <: or {
+or {
+  `const [$only] = $init`,
+  `let [$only] = $init`,
+  `var [$only] = $init`
+} where {
+  $init <: contains or { `$callee($...)`, `await $callee($...)` },
+  $callee <: or {
     r"(?:.*\.)?trap",
     r"(?:.*\.)?trapSync",
     r"(?:.*\.)?trapAsync",
-    r"(?:.*\.)?wait"
+    r"(?:g|group|[A-Za-z_$]*[Gg]roup)\.wait"
   },
   register_diagnostic(
     span = $only,

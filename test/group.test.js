@@ -130,7 +130,9 @@ describe('ErrorGroup', () => {
       assert.match(error.message, /1 of 2 tasks failed/)
     })
 
-    it('counts failed tasks, not collected errors, when maxErrors caps the boundary', async () => {
+    it('keeps every one of its own failures even when the boundary caps', async () => {
+      // The cap is the shared boundary's business. The group's own aggregate
+      // must still carry every failure it saw, or wait() would under-report.
       const group = new ErrorGroup({ maxErrors: 2 })
       for (let i = 0; i < 5; i += 1) {
         group.run(async () => {
@@ -141,33 +143,59 @@ describe('ErrorGroup', () => {
       const [, error] = await group.wait()
 
       assert.match(error.message, /5 of 5 tasks failed/)
-      assert.match(error.message, /2 collected/)
-      assert.equal([...error].length, 2)
-      assert.equal(group.results.filter(result => !result.ok).length, 5)
+      assert.equal([...error].length, 5)
+      assert.equal(group.boundary.count, 2)
     })
 
-    it('still reports failure when maxErrors is 0 and nothing was collected', async () => {
+    it('still reports failure when maxErrors is 0', async () => {
       const group = new ErrorGroup({ maxErrors: 0 })
       group.run(async () => {
-        throw new Error('swallowed by the cap')
+        throw new Error('not collected by the boundary')
       })
 
       const [values, error] = await group.wait()
 
       assert.equal(values, undefined)
-      assert(error instanceof AggregateError)
-      assert.deepEqual([...error], [])
-      assert.match(error.message, /1 of 1 task failed, 0 collected/)
+      assert.equal(group.boundary.count, 0)
+      assert.equal([...error].length, 1)
+      assert.match(error.message, /1 of 1 task failed/)
     })
 
-    it('omits the cap note when nothing was truncated', async () => {
-      const group = new ErrorGroup({ maxErrors: 10 })
+    it('ignores foreign errors in a shared boundary', async () => {
+      const boundary = new ErrorBoundary()
+      boundary.add(new Error('foreign one'))
+      boundary.add(new Error('foreign two'))
+
+      const group = new ErrorGroup({ boundary })
       group.run(async () => {
-        throw new Error('one')
+        throw new Error('mine')
       })
 
       const [, error] = await group.wait()
-      assert.equal(error.message, '1 of 1 task failed')
+
+      assert.match(error.message, /1 of 1 task failed/)
+      assert.deepEqual(
+        [...error].map(e => e.message),
+        ['mine']
+      )
+      assert.equal(boundary.count, 3)
+    })
+
+    it('survives the shared boundary being cleared mid-flight', async () => {
+      const boundary = new ErrorBoundary()
+      const group = new ErrorGroup({ boundary })
+      group.run(async () => {
+        throw new Error('mine')
+      })
+      await new Promise(resolve => setTimeout(resolve, 5))
+      boundary.clear()
+
+      const [, error] = await group.wait()
+      assert.match(error.message, /1 of 1 task failed/)
+      assert.deepEqual(
+        [...error].map(e => e.message),
+        ['mine']
+      )
     })
 
     it('normalizes a non-Error throw', async () => {
@@ -375,6 +403,70 @@ describe('ErrorGroup', () => {
 
       await group.wait()
       assert.equal(started, 1)
+    })
+  })
+
+  describe('signal survives reuse', () => {
+    it('keeps honouring the external signal after the first wait()', async () => {
+      // #detach used to run inside wait(), which silently disconnected the
+      // configured signal from every later task.
+      const controller = new AbortController()
+      const group = new ErrorGroup({ signal: controller.signal })
+
+      group.run(() => 1)
+      await group.wait()
+
+      controller.abort(new Error('shutdown'))
+      assert.equal(group.signal.aborted, true)
+
+      group.run(cancellable(1000, 'should not run'))
+      const [, error] = await group.wait()
+
+      assert.equal([...error].length, 1)
+      assert.equal(error.errors[0].message, 'shutdown')
+    })
+
+    it('aborts a task started after the first wait()', async () => {
+      const controller = new AbortController()
+      const group = new ErrorGroup({ signal: controller.signal })
+      group.run(() => 1)
+      await group.wait()
+
+      group.run(cancellable(1000, 'never'))
+      setTimeout(() => controller.abort(new Error('late shutdown')), 5)
+
+      const [, error] = await group.wait()
+      assert.equal(error.errors.at(-1).message, 'late shutdown')
+    })
+
+    it('rejects a non-integer limit', () => {
+      assert.throws(() => new ErrorGroup({ limit: 1.5 }), { name: 'RangeError' })
+      assert.throws(() => new ErrorGroup({ limit: Number.NaN }), { name: 'RangeError' })
+      assert.doesNotThrow(() => new ErrorGroup({ limit: Number.POSITIVE_INFINITY }))
+      assert.doesNotThrow(() => new ErrorGroup({ limit: 1 }))
+    })
+  })
+
+  describe('results while in flight', () => {
+    it('omits pending tasks rather than exposing undefined holes', async () => {
+      const group = new ErrorGroup()
+      group.run(async () => {
+        await sleep(40)
+        return 'slow'
+      })
+      group.run(async () => 'fast')
+
+      await sleep(15)
+
+      // Every element must be a real Result, even though task 0 is pending
+      for (const result of group.results) {
+        assert.equal(typeof result.ok, 'boolean')
+      }
+      assert.equal(group.results.length, 1)
+      assert.equal(group.size, 2)
+
+      await group.wait()
+      assert.equal(group.results.length, 2)
     })
   })
 

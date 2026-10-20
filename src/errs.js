@@ -233,6 +233,12 @@ async function parallel(tasks, options = {}) {
   }
 
   if (thunks.length > 0) {
+    // Attach a no-op handler to the promises that were already started before
+    // refusing the call, so the argument error is what the caller sees rather
+    // than an unrelated unhandledRejection crash a tick later.
+    for (const task of list) {
+      if (typeof task?.then === 'function') task.then(undefined, () => {})
+    }
     throw new TypeError(
       `parallel() takes either all thunks or all promises, got ${thunks.length} ` +
         `thunk(s) among ${list.length} tasks`
@@ -257,40 +263,69 @@ async function parallel(tasks, options = {}) {
  * @param {Error} error - The error to convert
  * @returns {object} JSON representation of the error
  */
-function toJSON(error, seen = new WeakSet()) {
-  if (error == null || typeof error !== 'object') {
-    return error
+function toJSON(error) {
+  return serialize(error, new Set())
+}
+
+/**
+ * Recursively serializes an error-like value.
+ *
+ * `ancestors` is an ancestor stack, not a visited set: entries are removed on
+ * the way out. A visited set would report any repeated reference as circular,
+ * and repeats are normal here -- under cancelOnError every sibling rejects
+ * with the same AbortError object, and that AbortError's cause is the root
+ * failure. Those are shared references in a DAG, not cycles.
+ * @param {unknown} value - The value to serialize
+ * @param {Set<unknown>} ancestors - Values currently being serialized
+ * @returns {unknown} A JSON-safe representation
+ */
+function serialize(value, ancestors) {
+  if (value == null || typeof value !== 'object') {
+    return value
   }
-  if (seen.has(error)) {
+  if (ancestors.has(value)) {
     return '[Circular]'
   }
-  seen.add(error)
+  ancestors.add(value)
 
-  const obj = {
-    name: error.name,
-    message: error.message,
-    stack: error.stack,
-    arguments: error.arguments,
-    type: error.type
-  }
+  try {
+    const error = /** @type {Record<string, any>} */ (value)
 
-  for (const key of Object.keys(error)) {
-    if (!(key in obj)) {
-      obj[key] = error[key]
+    if (Array.isArray(error)) {
+      return error.map(entry => serialize(entry, ancestors))
     }
-  }
 
-  // `cause` and an AggregateError's `errors` are the two axes an error can
-  // branch along, and both are non-enumerable when set by the constructor,
-  // so the Object.keys() copy above misses them.
-  if (error.cause != null) {
-    obj.cause = toJSON(error.cause, seen)
-  }
-  if (Array.isArray(error.errors)) {
-    obj.errors = error.errors.map(nested => toJSON(nested, seen))
-  }
+    const obj = {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      arguments: error.arguments,
+      type: error.type
+    }
 
-  return obj
+    for (const key of Object.keys(error)) {
+      if (!(key in obj)) {
+        // Recurse through own properties too: custom metadata can be
+        // circular, and copying it by reference leaves output that
+        // JSON.stringify cannot serialize.
+        obj[key] = serialize(error[key], ancestors)
+      }
+    }
+
+    // `cause` and an AggregateError's `errors` are the two axes an error can
+    // branch along, and both are non-enumerable when set by the constructor,
+    // so the Object.keys() copy above misses them.
+    if (error.cause != null) {
+      obj.cause = serialize(error.cause, ancestors)
+    }
+    if (Array.isArray(error.errors)) {
+      obj.errors = error.errors.map(nested => serialize(nested, ancestors))
+    }
+
+    return obj
+  } finally {
+    ancestors.delete(value)
+  }
 }
 
 /**
@@ -335,7 +370,7 @@ function assertErrorType(error, ErrorClass, message) {
 
 /**
  * @template T
- * @typedef {{ ok: true, value: T } | { ok: false, error: Error }} Result
+ * @typedef {([T, undefined] & { ok: true, value: T, error: undefined }) | ([T|undefined, Error] & { ok: false, value: T|undefined, error: Error })} Result
  */
 
 /**
@@ -368,7 +403,19 @@ async function trap(fn, options = {}) {
  */
 function trapSync(fn, options = {}) {
   try {
-    return ok(fn())
+    const value = fn()
+    // A thenable here means trapSync() was handed an async function. The
+    // sync door cannot await it, and returning ok:true with a pending
+    // promise in the value slot would let the real rejection escape as an
+    // unhandledRejection. Swallow the rejection so it cannot crash the
+    // process, and report the API misuse, which is the actual bug.
+    if (typeof value?.then === 'function') {
+      value.then(undefined, () => {})
+      throw new TypeError(
+        'trapSync() received a function that returned a promise. Use trap(), which awaits.'
+      )
+    }
+    return ok(value)
   } catch (error) {
     return fail(normalize(error), options.or)
   }
@@ -410,6 +457,9 @@ function toErrorList(input) {
   if (Array.isArray(input)) return input
   if (typeof input !== 'object') return []
   if (Array.isArray(input.errors)) return input.errors
+  // An ErrorBoundary exposes a copy via its `errors` getter, which the check
+  // above already covers; this keeps non-array error-ish shapes out.
+
   if (typeof input[Symbol.iterator] === 'function') return [...input]
   return input instanceof Error ? [input] : []
 }
@@ -422,7 +472,11 @@ function toErrorList(input) {
  * const { TimeoutError = [], NotFoundError = [] } = errs.byName(aggregate)
  */
 function byName(input) {
-  const grouped = {}
+  // Object.create(null): an error named `constructor`, `toString` or
+  // `hasOwnProperty` would otherwise collide with Object.prototype, where
+  // `??=` sees a non-nullish inherited value and the push fails. It also
+  // keeps destructuring defaults working for names that are absent.
+  const grouped = Object.create(null)
   for (const error of toErrorList(input)) {
     const key = error?.name || 'Error'
     grouped[key] ??= []

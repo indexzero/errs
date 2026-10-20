@@ -563,11 +563,26 @@ describe('errs', () => {
     })
 
     it('returns an empty record for empty and non-error input', () => {
-      assert.deepEqual(errs.byName(null), {})
-      assert.deepEqual(errs.byName(undefined), {})
-      assert.deepEqual(errs.byName([]), {})
-      assert.deepEqual(errs.byName('not an error'), {})
-      assert.deepEqual(errs.byName(42), {})
+      for (const input of [null, undefined, [], 'not an error', 42]) {
+        assert.deepEqual(Object.keys(errs.byName(input)), [])
+      }
+    })
+
+    it('uses a null-prototype record so prototype names cannot collide', () => {
+      const grouped = errs.byName([
+        Object.assign(new Error('a'), { name: 'constructor' }),
+        Object.assign(new Error('b'), { name: 'hasOwnProperty' }),
+        Object.assign(new Error('c'), { name: 'toString' })
+      ])
+
+      assert.equal(Object.getPrototypeOf(grouped), null)
+      assert.equal(grouped.constructor.length, 1)
+      assert.equal(grouped.hasOwnProperty.length, 1)
+      assert.equal(grouped.toString.length, 1)
+
+      // Destructuring defaults still work for an absent name
+      const { NotPresent = [] } = errs.byName([new Error('x')])
+      assert.deepEqual(NotPresent, [])
     })
 
     it('falls back to Error for a nameless error', () => {
@@ -792,6 +807,78 @@ describe('errs', () => {
       await assert.rejects(() => errs.parallel([() => 1, Promise.resolve(2)]), {
         name: 'TypeError'
       })
+    })
+  })
+  describe('review regressions', () => {
+    it('toJSON works as a bare callback', () => {
+      // A `seen` parameter in the public signature made Array#map pass the
+      // index as the cycle guard.
+      const json = [new Error('one'), new Error('two')].map(errs.toJSON)
+      assert.equal(json.length, 2)
+      assert.equal(json[0].message, 'one')
+      assert.equal(Array.from([new Error('x')], errs.toJSON)[0].message, 'x')
+    })
+
+    it('toJSON treats a shared reference as shared, not circular', () => {
+      const root = new Error('root')
+      const shared = new Error('abort', { cause: root })
+      const aggregate = new AggregateError([root, shared, shared], 'three')
+
+      const json = errs.toJSON(aggregate)
+
+      assert.equal(json.errors.length, 3)
+      assert.equal(json.errors[1].name, 'Error')
+      assert.equal(json.errors[2].message, 'abort')
+      assert.equal(json.errors[1].cause.message, 'root')
+    })
+
+    it('toJSON output is always JSON-serializable', () => {
+      const aggregate = new AggregateError([], 'cyclic')
+      aggregate.errors.push(aggregate.errors)
+      assert.doesNotThrow(() => JSON.stringify(errs.toJSON(aggregate)))
+
+      const withMeta = new Error('meta')
+      withMeta.meta = {}
+      withMeta.meta.self = withMeta.meta
+      assert.doesNotThrow(() => JSON.stringify(errs.toJSON(withMeta)))
+    })
+
+    it('normalize does not throw on a value whose String() throws', async () => {
+      const hostile = {
+        toString() {
+          throw new Error('hostile toString')
+        }
+      }
+
+      const [, error] = await errs.trap(() => {
+        throw hostile
+      })
+      assert(error instanceof Error)
+
+      const nullProto = Object.create(null)
+      const [, error2] = errs.trapSync(() => {
+        throw nullProto
+      })
+      assert(error2 instanceof Error)
+    })
+
+    it('trapSync refuses an async function instead of leaking the rejection', () => {
+      const [value, error] = errs.trapSync(async () => {
+        throw new Error('would escape')
+      })
+
+      assert.equal(value, undefined)
+      assert(error instanceof TypeError)
+      assert.match(error.message, /Use trap\(\)/)
+    })
+
+    it('parallel does not orphan started promises when refusing mixed input', async () => {
+      const rejected = Promise.reject(new Error('orphaned'))
+      await assert.rejects(() => errs.parallel([() => 1, rejected]), { name: 'TypeError' })
+
+      // If the rejection were unobserved this would be an unhandledRejection
+      await new Promise(resolve => setTimeout(resolve, 10))
+      await assert.rejects(() => rejected, { message: 'orphaned' })
     })
   })
 })

@@ -31,8 +31,11 @@ const result = boundary.trapSync(() => JSON.parse(input))
 if (result.ok) use(result.value)
 ```
 
-A missed migration fails loudly rather than quietly: array-destructuring the
-returned Promise throws a TypeError, because promises are not iterable.
+A missed migration fails loudly **if you destructure the tuple**:
+array-destructuring the returned Promise throws a TypeError, because promises
+are not iterable. If you keep the v1 `result.ok` reading, it stays quiet, since
+`.ok` on a promise is `undefined` and reads as a failure that never happened.
+Grep for `.trap(` before relying on the loud path.
 
 ### Results are now arrays as well as objects
 

@@ -11,12 +11,25 @@ import { fail, normalize, ok } from './result.js'
 
 /**
  * @template T
- * @typedef {[T|undefined, Error|undefined] & ({ ok: true, value: T, error: undefined } | { ok: false, value: T|undefined, error: Error })} Result
+ * @typedef {([T, undefined] & { ok: true, value: T, error: undefined }) | ([T|undefined, Error] & { ok: false, value: T|undefined, error: Error })} Result
  */
 
 /**
  * @typedef {{ index: number, promise?: Promise<void> }} Task
  */
+
+/**
+ * Removes a group's abort listener once the group itself is collected.
+ *
+ * The listener cannot be removed in wait(), because a group may be reused
+ * afterwards and must keep honouring its signal. Without this, every group
+ * created against a long-lived signal would leave an entry behind for that
+ * signal's whole lifetime.
+ * @type {FinalizationRegistry<{ signal: AbortSignal, listener: () => void }>}
+ */
+const detachOnCollect = new FinalizationRegistry(({ signal, listener }) => {
+  signal.removeEventListener('abort', listener)
+})
 
 /**
  * ErrorGroup - runs thunks with bounded concurrency, collecting every
@@ -38,8 +51,8 @@ export class ErrorGroup {
   #active = 0
   /** @type {(() => void)[]} */
   #waiting = []
-  /** @type {(() => void)|undefined} */
-  #detach
+  /** @type {Error[]} */
+  #failures = []
 
   /**
    * Creates a new ErrorGroup
@@ -53,8 +66,10 @@ export class ErrorGroup {
    */
   constructor(options = {}) {
     this.#limit = options.limit ?? Number.POSITIVE_INFINITY
-    if (!(this.#limit >= 1)) {
-      throw new RangeError(`group limit must be at least 1, got ${options.limit}`)
+    if (!(this.#limit >= 1) || !(Number.isInteger(this.#limit) || this.#limit === Infinity)) {
+      throw new RangeError(
+        `group limit must be a positive integer or Infinity, got ${options.limit}`
+      )
     }
 
     this.#cancelOnError = options.cancelOnError ?? false
@@ -73,9 +88,29 @@ export class ErrorGroup {
       return
     }
 
-    const onAbort = () => this.#controller.abort(external.reason)
-    external.addEventListener('abort', onAbort, { once: true })
-    this.#detach = () => external.removeEventListener('abort', onAbort)
+    // A WeakRef so a group that is finished with but never waited on can
+    // still be collected; the listener would otherwise pin it, and its
+    // results, for the whole lifetime of a long-lived shutdown signal.
+    // The listener is deliberately NOT removed in wait(): a group may be
+    // reused after waiting, and it must keep honouring its signal.
+    const ref = new WeakRef(this)
+    const listener = () => {
+      const group = ref.deref()
+      if (group) group.#adopt(external.reason)
+    }
+
+    external.addEventListener('abort', listener, { once: true })
+    detachOnCollect.register(this, { signal: external, listener })
+  }
+
+  /**
+   * Adopts an external abort reason onto the group's own controller
+   * @param {unknown} reason - The external signal's reason
+   */
+  #adopt(reason) {
+    if (!this.#controller.signal.aborted) {
+      this.#controller.abort(reason)
+    }
   }
 
   /**
@@ -102,7 +137,12 @@ export class ErrorGroup {
    * @returns {Result<unknown>[]} Copy of the per-task Results
    */
   get results() {
-    return [...this.#results]
+    // Array.from over a length, not a spread: #results is sparse while tasks
+    // are in flight, and spreading would materialize holes as undefined
+    // elements under a type that promises dense Results.
+    return Array.from({ length: this.#tasks.length }, (_, index) => this.#results[index]).filter(
+      result => result !== undefined
+    )
   }
 
   /**
@@ -141,30 +181,21 @@ export class ErrorGroup {
       await Promise.all(pending)
     } while (this.#tasks.length !== pending.length)
 
-    this.#detach?.()
-
-    // Count from the per-task Results, not from the boundary. A boundary at
-    // its maxErrors cap silently discards further errors, so boundary.count
-    // would under-report how many tasks actually failed.
-    const failed = this.#results.filter(result => result && !result.ok).length
+    // Count and aggregate from this group's own failures, never from the
+    // boundary. The boundary may be shared with other groups, may have been
+    // pre-filled, may be at its maxErrors cap, and may be cleared underneath
+    // us; any of those make boundary.count a wrong answer to "how many of my
+    // tasks failed", and could drop a failure from the aggregate silently.
+    const failed = this.#failures.length
     if (failed === 0) {
       return ok(this.#results.map(result => result.value))
     }
 
-    const collected = this.#boundary.count
     const total = this.#tasks.length
     const label = total === 1 ? 'task' : 'tasks'
-    let message = `${failed} of ${total} ${label} failed`
-    if (collected < failed) {
-      message += `, ${collected} collected (boundary is at its maxErrors limit)`
-    }
+    const message = `${failed} of ${total} ${label} failed`
 
-    // toAggregateError returns null on an empty boundary, which happens when
-    // maxErrors is 0. The group still has to report the failure.
-    const aggregate =
-      this.#boundary.toAggregateError(message) ?? makeIterable(new AggregateError([], message))
-
-    return fail(aggregate)
+    return fail(makeIterable(new AggregateError([...this.#failures], message)))
   }
 
   /**
@@ -184,6 +215,7 @@ export class ErrorGroup {
     } catch (error) {
       const normalized = normalize(error)
       this.#results[task.index] = fail(normalized)
+      this.#failures.push(normalized)
       this.#boundary.add(normalized)
 
       if (this.#cancelOnError && !this.#controller.signal.aborted) {

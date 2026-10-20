@@ -1,4 +1,5 @@
 node_modules/
 coverage/
 *.log
-.DS_Storedist/
+.DS_Store
+dist/

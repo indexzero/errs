@@ -10,7 +10,7 @@
  * The hybrid Result shape: an array of [value, error] that also carries
  * `ok`, `value` and `error` as non-enumerable properties.
  * @template T
- * @typedef {[T|undefined, Error|undefined] & ({ ok: true, value: T, error: undefined } | { ok: false, value: T|undefined, error: Error })} Result
+ * @typedef {([T, undefined] & { ok: true, value: T, error: undefined }) | ([T|undefined, Error] & { ok: false, value: T|undefined, error: Error })} Result
  */
 
 /**
@@ -21,7 +21,19 @@
  * @returns {Error} The value if it is already an Error, else one wrapping it
  */
 export function normalize(error) {
-  return error instanceof Error ? error : new Error(String(error))
+  if (error instanceof Error) return error
+
+  // String() invokes toPrimitive, which throws on a null-prototype object and
+  // on anything with a throwing toString. normalize() is called from inside
+  // catch blocks, so throwing here escapes as an unhandled rejection and can
+  // take the process down while reporting an error.
+  let message
+  try {
+    message = String(error)
+  } catch {
+    message = Object.prototype.toString.call(error)
+  }
+  return new Error(message)
 }
 
 /**
