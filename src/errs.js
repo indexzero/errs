@@ -12,22 +12,74 @@ import { format } from './format.js'
 import { ErrorGroup } from './group.js'
 import { fail, normalize, ok } from './result.js'
 
+/**
+ * An error read and written loosely.
+ *
+ * create() and merge() copy arbitrary metadata on and off errors, and `Error`
+ * has no index signature for it.
+ * @typedef {Error & Record<string, unknown>} LooseError
+ */
+
+/**
+ * A registrable error constructor, matching the published ErrorTypeConstructor.
+ *
+ * `any[]` rather than `unknown[]`: parameters are contravariant, so an
+ * `unknown[]` signature would reject every error subclass that declares a
+ * typed constructor, which is all of them.
+ * @typedef {new (...args: any[]) => Error} ErrorTypeConstructor
+ */
+
+/**
+ * An options object for create(): `message` and `name` are read, and every own
+ * property is copied onto the resulting error.
+ *
+ * The index signature is `any` rather than `unknown` so that an Error is
+ * assignable here, which is what handle() relies on: an interface gets no
+ * implicit index signature, and `Record<string, unknown>` would reject it.
+ * @typedef {{ message?: string, name?: string, stack?: string } & Record<string, any>} CreateOptions
+ */
+
+/**
+ * Everything create() accepts in its options slot: a message string, an array
+ * of message parts, an options object, an Error to pass through, or a thunk
+ * returning any of those.
+ * @typedef {string|string[]|CreateOptions|(() => string|string[]|CreateOptions)|null} CreateInput
+ */
+
+/** @type {Record<string, ErrorTypeConstructor>} */
 const registered = {}
 
 /**
+ * Looks up a registered error constructor.
+ *
+ * The key is `unknown` because create() takes its options in the type slot
+ * when called with one argument: `create({ message })` arrives here with an
+ * object, which misses the registry exactly as an unregistered name would.
+ * @param {unknown} type - Candidate registered type name
+ * @returns {ErrorTypeConstructor|undefined} The constructor, if one is registered
+ */
+function lookup(type) {
+  return registered[/** @type {string} */ (type)]
+}
+
+/**
  * Creates a new error instance with the specified type and options
- * @param {string} [type] - Registered error type to create
- * @param {string|object|Array|function} [opts] - Options for creating the error
+ * @param {CreateInput} [type] - Registered error type to create, or the options
+ *   themselves when that is the only argument
+ * @param {CreateInput} [opts] - Options for creating the error
  * @returns {Error} The created error
  */
 function create(type, opts) {
-  if (opts === undefined && !registered[type]) {
-    opts = type
+  if (opts === undefined && !lookup(type)) {
+    opts = /** @type {CreateInput} */ (type)
     type = null
   }
 
-  if (opts?.stack) {
-    return opts
+  // An input that already carries a stack is an existing error, returned
+  // untouched; nothing else here may assume the input has error properties.
+  const existing = /** @type {LooseError} */ (opts)
+  if (existing?.stack) {
+    return existing
   }
 
   let message
@@ -54,16 +106,24 @@ function create(type, opts) {
     }
   }
 
-  const ErrorProto = (type && registered[type]) || Error
-  const error = new ErrorProto(message)
+  // Whatever is left in `opts` is read as an options object from here on: the
+  // string and array forms were folded into `message` above and replaced with
+  // null, and a thunk was already called. The checker cannot follow that
+  // through the switch, so one cast covers both reads below.
+  const fields = /** @type {CreateOptions|null|undefined} */ (opts)
+
+  const ErrorProto = (type && lookup(type)) || Error
+  const error = /** @type {LooseError} */ (new ErrorProto(message))
 
   if (!error.name || error.name === 'Error') {
-    error.name = opts?.name || ErrorProto.name || 'Error'
+    error.name = fields?.name || ErrorProto.name || 'Error'
   }
 
   if (!error.stack) {
     Error.captureStackTrace?.(error, create)
-  } else if (Error.captureStackTrace) {
+    // @types/node declares captureStackTrace as always present, so a bare
+    // truthiness check reads as a mistake to the checker; it is V8-only.
+  } else if (typeof Error.captureStackTrace === 'function') {
     // V8 only - we understand the format
     const lines = error.stack.split('\n')
     if (lines[0]?.includes(error.message || '')) {
@@ -72,9 +132,9 @@ function create(type, opts) {
     }
   }
 
-  if (opts) {
-    Object.keys(opts).forEach(key => {
-      error[key] = opts[key]
+  if (fields) {
+    Object.keys(fields).forEach(key => {
+      error[key] = fields[key]
     })
   }
 
@@ -83,29 +143,38 @@ function create(type, opts) {
 
 /**
  * Merges an existing error with a new error instance
- * @param {Error} err - The error to merge
- * @param {string} [type] - Registered error type to create
- * @param {string|object|Array|function} [opts] - Options for creating the error
+ * @param {unknown} err - The error to merge, which need not be an Error
+ * @param {CreateInput} [type] - Registered error type to create, or the options
+ *   themselves when that is the last argument
+ * @param {CreateInput} [opts] - Options for creating the error
  * @returns {Error} The merged error
  */
 function merge(err, type, opts) {
-  const merged = create(type, opts)
+  const merged = /** @type {LooseError} */ (create(type, opts))
 
   if (err == null) {
     return merged
   }
 
+  // merge() is given whatever was caught, so the source is read loosely: the
+  // guard below is what decides which of these reads are meaningful.
+  const source = /** @type {LooseError} */ (err)
+
   if (!Array.isArray(err) && typeof err === 'object') {
-    Object.keys(err).forEach(key => {
+    Object.keys(source).forEach(key => {
       if (['stack', 'type', 'arguments', 'message'].indexOf(key) === -1) {
-        merged[key] = err[key]
+        merged[key] = source[key]
       }
     })
   }
 
-  merged.name = merged.name || err.name
-  merged.message = merged.message || err.message
-  merged.stack = err.stack || merged.stack
+  merged.name = merged.name || source.name
+  merged.message = merged.message || source.message
+  // Neither error need carry a stack, and writing the fallback back as
+  // `undefined` is what this line has always done. Error's own declaration is
+  // `stack?: string`, which exactOptionalPropertyTypes reads as "string, or
+  // absent", so the write needs the cast.
+  merged.stack = /** @type {string} */ (source.stack || merged.stack)
 
   // Set native cause chain
   if (err instanceof Error) {
@@ -117,8 +186,9 @@ function merge(err, type, opts) {
 
 /**
  * Handles an error by invoking a callback or emitting on an EventEmitter
- * @param {Error|string|object} error - Error to handle
- * @param {function|EventEmitter} [callback] - Continuation or stream to pass the error to
+ * @param {Error|CreateInput} error - Error to handle
+ * @param {((err: Error) => void)|EventEmitter} [callback] - Continuation or stream
+ *   to pass the error to
  * @param {EventEmitter} [stream] - Explicit EventEmitter to use
  * @returns {EventEmitter|undefined} EventEmitter if no callback provided
  */
@@ -126,11 +196,13 @@ function handle(error, callback, stream) {
   error = create(error)
 
   if (typeof callback === 'function') {
-    callback(error)
+    callback(/** @type {Error} */ (error))
   }
 
   if (typeof callback !== 'function' || stream) {
-    const emitter = stream || callback || new EventEmitter()
+    // `callback` reaches the `||` chain below only when it is not a function,
+    // or when `stream` was passed and wins it, so this is an EventEmitter.
+    const emitter = /** @type {EventEmitter} */ (stream || callback || new EventEmitter())
     queueMicrotask(() => {
       emitter.emit('error', error)
     })
@@ -140,15 +212,19 @@ function handle(error, callback, stream) {
 
 /**
  * Registers an error type for future calls to create()
- * @param {string} type - Type of the error to register
- * @param {function} proto - Constructor function of the error to register
+ *
+ * Given a single argument, that argument is the constructor and the type name
+ * is its own `name`, lowercased.
+ * @param {string|ErrorTypeConstructor} type - Type of the error to register, or the
+ *   constructor itself in the one-argument form
+ * @param {ErrorTypeConstructor} [proto] - Constructor function of the error to register
  */
 function register(type, proto) {
   if (arguments.length === 1) {
-    proto = type
+    proto = /** @type {ErrorTypeConstructor} */ (type)
     type = proto.name.toLowerCase()
   }
-  registered[type] = proto
+  registered[/** @type {string} */ (type)] = /** @type {ErrorTypeConstructor} */ (proto)
 }
 
 /**
@@ -205,13 +281,13 @@ function warnAboutPromises() {
  * `signal` apply. An array of already-started promises still works and
  * keeps the v1 behaviour, but warns once, because neither option can
  * apply to work that is already running.
- * @param {Array<(signal: AbortSignal) => unknown>|Promise[]} tasks - Thunks or promises
- * @param {object} [options] - Options
- * @param {number} [options.limit] - Maximum tasks in flight, thunks only
- * @param {AbortSignal} [options.signal] - Cancellation signal, thunks only
- * @param {boolean} [options.cancelOnError] - Abort siblings on first failure, thunks only
- * @param {ErrorBoundary} [options.boundary] - Boundary to collect into
- * @returns {Promise<{results: Array, boundary: ErrorBoundary}>} Results and boundary
+ * @param {Array<(signal: AbortSignal) => unknown>|Promise<unknown>[]} tasks - Thunks or promises
+ * @param {import('./group.js').ErrorGroupOptions} [options] - Options; `limit`,
+ *   `signal` and `cancelOnError` apply to thunks only, and `boundary` collects
+ *   into an existing boundary. Typed by the shape ErrorGroup and ErrorBoundary
+ *   accept, because the options are forwarded to them verbatim.
+ * @returns {Promise<{results: PromiseSettledResult<unknown>[], boundary: ErrorBoundary}>}
+ *   Results and boundary
  */
 async function parallel(tasks, options = {}) {
   const list = [...tasks]
@@ -224,6 +300,7 @@ async function parallel(tasks, options = {}) {
     }
     await errorGroup.wait()
 
+    /** @type {PromiseSettledResult<unknown>[]} */
     const results = errorGroup.results.map(result =>
       result.ok
         ? { status: 'fulfilled', value: result.value }
@@ -237,7 +314,10 @@ async function parallel(tasks, options = {}) {
     // refusing the call, so the argument error is what the caller sees rather
     // than an unrelated unhandledRejection crash a tick later.
     for (const task of list) {
-      if (typeof task?.then === 'function') task.then(undefined, () => {})
+      // Narrowed by hand: this branch is the mixed case, so a given entry may
+      // be either a thunk or a promise, and only the promises need settling.
+      const started = /** @type {Promise<unknown>} */ (task)
+      if (typeof started?.then === 'function') started.then(undefined, () => {})
     }
     throw new TypeError(
       `parallel() takes either all thunks or all promises, got ${thunks.length} ` +
@@ -261,10 +341,12 @@ async function parallel(tasks, options = {}) {
 /**
  * Converts an error to JSON format
  * @param {Error} error - The error to convert
- * @returns {object} JSON representation of the error
+ * @returns {Record<string, unknown>} JSON representation of the error
  */
 function toJSON(error) {
-  return serialize(error, new Set(), 0)
+  // serialize() returns its input verbatim for a non-object, which an Error
+  // never is, so the top-level call always produces the object form.
+  return /** @type {Record<string, unknown>} */ (serialize(error, new Set(), 0))
 }
 
 /**
@@ -299,6 +381,7 @@ function serialize(value, ancestors, depth) {
       return error.map(entry => serialize(entry, ancestors, depth + 1))
     }
 
+    /** @type {Record<string, unknown>} */
     const obj = {
       name: error.name,
       message: error.message,
@@ -413,8 +496,9 @@ function trapSync(fn, options = {}) {
     // promise in the value slot would let the real rejection escape as an
     // unhandledRejection. Swallow the rejection so it cannot crash the
     // process, and report the API misuse, which is the actual bug.
-    if (typeof value?.then === 'function') {
-      value.then(undefined, () => {})
+    const thenable = /** @type {Promise<unknown>} */ (value)
+    if (typeof thenable?.then === 'function') {
+      thenable.then(undefined, () => {})
       throw new TypeError(
         'trapSync() received a function that returned a promise. Use trap(), which awaits.'
       )
@@ -463,11 +547,18 @@ function toErrorList(input) {
   if (input == null) return []
   if (Array.isArray(input)) return input
   if (typeof input !== 'object') return []
-  if (Array.isArray(input.errors)) return input.errors
+
+  // The input is some error-ish object, but `errors` is not declared on Error,
+  // and nothing here may assume the value is iterable before it is checked.
+  const collection = /** @type {{ errors?: unknown, [Symbol.iterator]?: unknown }} */ (input)
+
+  if (Array.isArray(collection.errors)) return collection.errors
   // An ErrorBoundary exposes a copy via its `errors` getter, which the check
   // above already covers; this keeps non-array error-ish shapes out.
 
-  if (typeof input[Symbol.iterator] === 'function') return [...input]
+  if (typeof collection[Symbol.iterator] === 'function') {
+    return [.../** @type {Iterable<Error>} */ (input)]
+  }
   return input instanceof Error ? [input] : []
 }
 
@@ -504,7 +595,9 @@ function byName(input) {
  * @returns {E[]} Matching errors, in encounter order
  */
 function pick(input, ErrorClass) {
-  return toErrorList(input).filter(error => error instanceof ErrorClass)
+  return toErrorList(input).filter(
+    /** @type {(error: Error) => error is E} */ (error => error instanceof ErrorClass)
+  )
 }
 
 export default {
