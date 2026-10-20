@@ -40,11 +40,46 @@ export type ErrorTypeConstructor<E extends Error = Error> = new (...args: any[])
  * Anything create() accepts in its options slot: a message string, an array of
  * message parts, an options object, or a thunk returning one of those.
  */
+export interface CreateOptions extends ErrorOptions {
+  message?: string
+  name?: string
+  /**
+   * Any other field is copied onto the created error. `any` rather than
+   * `unknown` because an interface gets no implicit index signature, and
+   * handle() forwards an Error through this slot.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: see above
+  [key: string]: any
+}
+
+/**
+ * Everything create() accepts in its options slot. `null` is included because
+ * create() normalizes the string and array forms by folding them into the
+ * message and setting this slot to null, and merge() forwards it through.
+ */
+/**
+ * Everything byName() and pick() accept.
+ *
+ * Described structurally rather than as ErrorBoundary: the implementation
+ * only reads an `errors` array, and naming a class with private fields here
+ * would make the signature unverifiable against the JSDoc it mirrors. An
+ * ErrorBoundary satisfies `{ errors: Error[] }` through its getter.
+ */
+export type ErrorInput =
+  | AggregateError
+  | { errors: Error[] }
+  | Iterable<Error>
+  | Error[]
+  | Error
+  | null
+  | undefined
+
 export type CreateInput =
   | string
   | string[]
-  | ErrorOptions
-  | (() => string | string[] | ErrorOptions)
+  | CreateOptions
+  | (() => string | string[] | CreateOptions)
+  | null
 
 /**
  * Result from parallel operation
@@ -232,9 +267,7 @@ export function tryCatchAsync<T>(fn: () => Promise<T>): Promise<Result<T>>
  * @example
  * const { TimeoutError = [], NotFoundError = [] } = errs.byName(aggregate)
  */
-export function byName(
-  input: AggregateError | ErrorBoundary | Iterable<Error> | Error[] | Error | null | undefined
-): Record<string, Error[]>
+export function byName(input: ErrorInput): Record<string, Error[]>
 
 /**
  * Selects the errors that are instances of a given class.
@@ -243,10 +276,7 @@ export function byName(
  * @param ErrorClass - Class to match against
  * @returns Matching errors, in encounter order
  */
-export function pick<E extends Error>(
-  input: AggregateError | ErrorBoundary | Iterable<Error> | Error[] | Error | null | undefined,
-  ErrorClass: ErrorTypeConstructor<E>
-): E[]
+export function pick<E extends Error>(input: ErrorInput, ErrorClass: ErrorTypeConstructor<E>): E[]
 
 declare const errs: {
   registered: typeof registered

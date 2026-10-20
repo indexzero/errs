@@ -26,7 +26,19 @@ import { fail, normalize, ok } from './result.js'
  * `any[]` rather than `unknown[]`: parameters are contravariant, so an
  * `unknown[]` signature would reject every error subclass that declares a
  * typed constructor, which is all of them.
- * @typedef {new (...args: any[]) => Error} ErrorTypeConstructor
+ * @template {Error} [E=Error]
+ * @typedef {new (...args: any[]) => E} ErrorTypeConstructor
+ */
+
+/**
+ * Everything byName() and pick() accept. Mirrors the ErrorInput union in
+ * errs.d.ts; the conformance check in test/types compares the two.
+ * Named structurally rather than as ErrorBoundary on purpose: a class with
+ * private fields is nominally typed, so naming it here would make this
+ * signature impossible to verify against the hand-written declaration. The
+ * implementation only ever reads an `errors` array, so this is also the more
+ * accurate description. An ErrorBoundary satisfies it through its getter.
+ * @typedef {AggregateError|{errors: Error[]}|Iterable<Error>|Error[]|Error|null|undefined} ErrorInput
  */
 
 /**
@@ -63,8 +75,24 @@ function lookup(type) {
 }
 
 /**
- * Creates a new error instance with the specified type and options
- * @param {CreateInput} [type] - Registered error type to create, or the options
+ * Creates a new error instance with the specified type and options.
+ *
+ * Two forms, declared as overloads so that `create(opts)` does not also
+ * accept a second argument and `create(type, opts)` requires a string type.
+ * The single implementation signature below is wider than either, because it
+ * has to accept both shapes.
+ * @overload
+ * @param {string} [type] - Registered error type to create
+ * @param {CreateInput} [opts] - Options for creating the error
+ * @returns {Error} The created error
+ */
+/**
+ * @overload
+ * @param {CreateInput} [opts] - Options for creating the error, with no type
+ * @returns {Error} The created error
+ */
+/**
+ * @param {CreateInput} [type] - Registered error type, or the options
  *   themselves when that is the only argument
  * @param {CreateInput} [opts] - Options for creating the error
  * @returns {Error} The created error
@@ -150,7 +178,13 @@ function create(type, opts) {
  * @returns {Error} The merged error
  */
 function merge(err, type, opts) {
-  const merged = /** @type {LooseError} */ (create(type, opts))
+  // The overloads on create() constrain external callers to either
+  // (string, opts) or (opts); merge() forwards whatever it was given, which
+  // is the wider implementation signature.
+  const build = /** @type {(type?: CreateInput, opts?: CreateInput) => Error} */ (
+    /** @type {unknown} */ (create)
+  )
+  const merged = /** @type {LooseError} */ (build(type, opts))
 
   if (err == null) {
     return merged
@@ -214,10 +248,23 @@ function handle(error, callback, stream) {
  * Registers an error type for future calls to create()
  *
  * Given a single argument, that argument is the constructor and the type name
- * is its own `name`, lowercased.
+ * is its own `name`, lowercased. Declared as overloads so that the
+ * one-argument form does not also accept a stray second argument.
+ * @overload
+ * @param {string} type - Type name to register the error under
+ * @param {ErrorTypeConstructor} proto - Constructor of the error to register
+ * @returns {void}
+ */
+/**
+ * @overload
+ * @param {ErrorTypeConstructor} proto - Constructor, named by its own `name`
+ * @returns {void}
+ */
+/**
  * @param {string|ErrorTypeConstructor} type - Type of the error to register, or the
  *   constructor itself in the one-argument form
  * @param {ErrorTypeConstructor} [proto] - Constructor function of the error to register
+ * @returns {void}
  */
 function register(type, proto) {
   if (arguments.length === 1) {
@@ -574,7 +621,7 @@ function toErrorList(input) {
 
 /**
  * Groups errors by their `name`, for destructuring by type
- * @param {unknown} input - An AggregateError, boundary, array or iterable of errors
+ * @param {ErrorInput} input - An AggregateError, boundary, array or iterable of errors
  * @returns {Record<string, Error[]>} Errors keyed by name, in encounter order
  * @example
  * const { TimeoutError = [], NotFoundError = [] } = errs.byName(aggregate)
@@ -600,8 +647,8 @@ function byName(input) {
  * shallow: it matches the listed errors themselves and does not walk their
  * cause chains.
  * @template {Error} E
- * @param {unknown} input - An AggregateError, boundary, array or iterable of errors
- * @param {new (...args: any[]) => E} ErrorClass - Class to match against
+ * @param {ErrorInput} input - An AggregateError, boundary, array or iterable of errors
+ * @param {ErrorTypeConstructor<E>} ErrorClass - Class to match against
  * @returns {E[]} Matching errors, in encounter order
  */
 function pick(input, ErrorClass) {

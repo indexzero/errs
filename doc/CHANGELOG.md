@@ -32,6 +32,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `build:types` is gone. It emitted nothing and never had: the package ships
+  `src/*.d.ts` directly through the exports map, and a sibling `.d.ts` for
+  every `.js` makes TypeScript drop the `.js` from the program, so there was
+  no artifact to build. `tsconfig.json` now declares `noEmit` and says what it
+  checks. The replacement gate is `check:dts`.
 - **BREAKING: `boundary.trap()` is now async.** It accepts sync functions,
   async functions and plain promise-returning functions, and always returns a
   Promise. The synchronous door is `boundary.trapSync()`. A missed migration
@@ -104,11 +109,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `plugins/no-dropped-error.grit`, a Biome plugin flagging a Result whose error
   slot is dropped outright, which `noUnusedVariables` cannot see. Covers
   `const`, `let` and `var`, and is now shipped in the package.
-- `check:js` script and `tsconfig.check.json`, which actually typecheck the
-  JSDoc in `src/*.js`. The main config cannot: a sibling `.d.ts` exists for
-  every `.js`, so TypeScript drops the `.js` from the program and `checkJs`
-  silently does nothing. 53 pre-existing errors in `errs.js` and `format.js`
-  remain, so it is not yet wired into `check`.
+- Three real type gates, replacing one that did nothing. `check:dts`
+  typechecks the hand-written declarations, `check:js` typechecks the JSDoc in
+  `src/*.js`, and `check:types` compares the two by deriving declarations from
+  the JSDoc and asserting assignability against the hand-written ones. All
+  three run in `check`, and `prepublishOnly` runs `check` plus the tests.
+- The JSDoc is now as precise as the declarations it mirrors: `create()` and
+  `register()` have `@overload` tags, `CreateInput`/`CreateOptions`/`ErrorInput`
+  are shared definitions, and `makeIterable()`, `toAggregateError()`, `wait()`
+  and `parallel()` carry their full types. Every divergence was closed by
+  tightening the JSDoc, never by loosening a declaration.
 
 ### Deprecated
 

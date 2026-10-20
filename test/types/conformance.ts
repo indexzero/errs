@@ -55,6 +55,43 @@ declare const genResult: typeof GenResult
 declare const handFormat: typeof HandFormat
 declare const genFormat: typeof GenFormat
 
+// Gen <- Hand: the declaration must not be more precise than the JSDoc.
+//
+// Asserted only for the modules that export no class. A class with private
+// fields is NOMINALLY typed, so the generated declaration carries a
+// `#private` brand that cannot be made interchangeable with a hand-written
+// one: omit it and the member is missing, declare it and TypeScript reports
+// that it "refers to a different member". Both were tried. That makes this
+// direction unachievable for boundary, group, and errs (which returns an
+// ErrorBoundary), and it is the only reason. Every other divergence was
+// closed by making the JSDoc as precise as the declaration: create() and
+// register() gained @overload tags, CreateInput and CreateOptions were
+// aligned, makeIterable() and toAggregateError() gained their iterable
+// return, wait() gained its aggregate error type, and parallel() gained its
+// generic parameter.
+// For the class-exporting modules the nominal brand only blocks the class
+// itself, so assert this direction per export instead, covering everything
+// whose type does not transitively mention one. Without these, loosening a
+// JSDoc annotation in errs.js would go unnoticed.
+export const createNotDemanding: typeof GenErrs.create = handErrs.create
+export const mergeNotDemanding: typeof GenErrs.merge = handErrs.merge
+export const handleNotDemanding: typeof GenErrs.handle = handErrs.handle
+export const registerNotDemanding: typeof GenErrs.register = handErrs.register
+export const unregisterNotDemanding: typeof GenErrs.unregister = handErrs.unregister
+export const toJSONNotDemanding: typeof GenErrs.toJSON = handErrs.toJSON
+export const isErrorTypeNotDemanding: typeof GenErrs.isErrorType = handErrs.isErrorType
+export const isRegisteredTypeNotDemanding: typeof GenErrs.isRegisteredType =
+  handErrs.isRegisteredType
+export const assertErrorTypeNotDemanding: typeof GenErrs.assertErrorType = handErrs.assertErrorType
+export const trapNotDemanding: typeof GenErrs.trap = handErrs.trap
+export const trapSyncNotDemanding: typeof GenErrs.trapSync = handErrs.trapSync
+export const byNameNotDemanding: typeof GenErrs.byName = handErrs.byName
+export const pickNotDemanding: typeof GenErrs.pick = handErrs.pick
+export const makeIterableNotDemanding: typeof GenBoundary.makeIterable = handBoundary.makeIterable
+
+export const resultNotDemanding: typeof GenResult = handResult
+export const formatNotDemanding: typeof GenFormat = handFormat
+
 // Hand <- Gen: the declaration must not promise more than the code has.
 export const errsNotOverPromising: typeof HandErrs = genErrs
 export const boundaryNotOverPromising: typeof HandBoundary = genBoundary

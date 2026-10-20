@@ -38,7 +38,7 @@
     "test:coverage": "node --test --experimental-test-coverage test/**/*.test.js",
     "test:watch": "node --test --watch test/**/*.test.js",
     "test:examples": "bash test/examples.test.sh",
-    "build:types": "tsc",
+    "check:dts": "tsc",
     "check:js": "tsc -p tsconfig.check.json",
     "check:types:gen": "tsc -p tsconfig.types-gen.json",
     "check:types": "pnpm run check:types:gen && tsc -p tsconfig.types.json",
@@ -46,9 +46,9 @@
     "lint:fix": "biome lint --write src test examples",
     "format": "biome format --write src test examples",
     "format:check": "biome format src test examples",
-    "check": "biome check src test examples && pnpm run check:js && pnpm run check:types && pnpm run build:types",
+    "check": "biome check src test examples && pnpm run check:dts && pnpm run check:js && pnpm run check:types",
     "check:fix": "biome check --write src test examples",
-    "prepublishOnly": "pnpm run build:types"
+    "prepublishOnly": "pnpm run check && pnpm test"
   },
   "repository": {
     "type": "git",
