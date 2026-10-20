@@ -52,15 +52,22 @@ export function normalize(error) {
  */
 export function result(ok, value, error) {
   const tuple = [value, error]
+
+  // defineProperties is only here for `enumerable: false`, which is the one
+  // thing freeze cannot do: it keeps Object.keys() and JSON.stringify() seeing
+  // a plain two-element array. Writability and configurability come from the
+  // freeze below, so they are not restated here.
   Object.defineProperties(tuple, {
-    ok: { value: ok, enumerable: false, configurable: false },
-    value: { value, enumerable: false, configurable: false },
-    error: { value: error, enumerable: false, configurable: false }
+    ok: { value: ok, enumerable: false },
+    value: { value, enumerable: false },
+    error: { value: error, enumerable: false }
   })
 
-  // Frozen so the two readings cannot disagree. Without this, `result[0] = x`
-  // succeeded while `.value` kept the old value, and `.ok = false` failed
-  // (silently in sloppy mode, loudly in strict) for no visible reason.
+  // The freeze is load-bearing, and not redundant with the above. The named
+  // properties are locked by their descriptors, but the array indices and
+  // `length` come from the literal and stay writable, so without this
+  // `result[0] = x` succeeded while `.value` kept the old value and the two
+  // readings disagreed.
   //
   // Note that copying a Result does NOT carry the named properties: spread,
   // structuredClone, Object.assign, Array.from and map/filter/concat all
