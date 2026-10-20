@@ -44,7 +44,7 @@
     "lint:fix": "biome lint --write src test examples",
     "format": "biome format --write src test examples",
     "format:check": "biome format src test examples",
-    "check": "biome check src test examples && pnpm run build:types",
+    "check": "biome check src test examples && pnpm run check:js && pnpm run build:types",
     "check:fix": "biome check --write src test examples",
     "prepublishOnly": "pnpm run build:types"
   },
