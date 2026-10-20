@@ -9,10 +9,30 @@
 import { styleText } from 'node:util'
 
 /**
+ * One link in a cause chain, as the walkers below actually read it.
+ *
+ * `Error` is not enough on its own: `cause` is typed `unknown` there, and an
+ * AggregateError's `errors` is not declared on `Error` at all. Both are
+ * declared here so a chain can be walked without a cast per hop. Every read
+ * is still guarded, because a `cause` can be any thrown value.
+ * @typedef {Error & { cause?: ChainLink, errors?: unknown }} ChainLink
+ */
+
+/**
+ * A color, background or modifier name accepted by `styleText`
+ * @typedef {Parameters<typeof styleText>[0]} StyleFormat
+ */
+
+/**
+ * Applies a style to a string, or returns it unchanged when colors are off
+ * @typedef {(text: string, style: StyleFormat) => string} Styler
+ */
+
+/**
  * Formats an error for various output targets
  * @param {Error} error - The error to format
  * @param {object} [options] - Formatting options
- * @param {string} [options.format='terminal'] - Output format: 'terminal', 'json', 'html'
+ * @param {'terminal'|'json'|'html'} [options.format='terminal'] - Output format
  * @param {boolean} [options.colors=true] - Use colors in terminal output
  * @param {number} [options.indent=2] - JSON indentation spaces
  * @returns {string} Formatted error string
@@ -83,14 +103,18 @@ function describe(value) {
  * @returns {string} Formatted terminal string
  */
 function formatTerminal(error, { colors }) {
+  /** @type {Styler} */
   const style =
     colors && process.stdout.isTTY && process.stdout.hasColors?.()
       ? (s, c) => styleText(c, s)
       : s => s
 
+  /** @type {string[]} */
   const lines = []
   const seen = new Set()
-  let current = error
+  // The head of the chain is an Error; every `cause` after it is whatever was
+  // thrown, which is why ChainLink types the hops rather than Error.
+  let current = /** @type {ChainLink|undefined} */ (error)
   let depth = 0
   let collected = 0
 
@@ -152,6 +176,12 @@ function formatTerminal(error, { colors }) {
 function formatJSON(error, { indent }) {
   const ancestors = new Set()
 
+  /**
+   * Serializes one value of a cause chain or aggregate
+   * @param {unknown} err - The value to serialize, which need not be an Error
+   * @param {number} [depth] - Current recursion depth
+   * @returns {unknown} A JSON-safe representation
+   */
   function serialize(err, depth = 0) {
     if (depth > 10) return { truncated: true }
     // A non-object member of an aggregate (null, a string, a number) has no
@@ -164,23 +194,28 @@ function formatJSON(error, { indent }) {
     if (ancestors.has(err)) return { circular: true }
     ancestors.add(err)
 
+    // Read loosely: the value is known to be a non-null object, but not that
+    // it is an Error, and its own metadata keys are copied below by name.
+    const link = /** @type {ChainLink & Record<string, unknown>} */ (err)
+
+    /** @type {Record<string, unknown>} */
     const obj = {
-      name: err.name,
-      message: err.message,
-      stack: err.stack?.split('\n')
+      name: link.name,
+      message: link.message,
+      stack: link.stack?.split('\n')
     }
 
-    if (err.cause) {
-      obj.cause = serialize(err.cause, depth + 1)
+    if (link.cause) {
+      obj.cause = serialize(link.cause, depth + 1)
     }
 
     if (err instanceof AggregateError && err.errors) {
       obj.errors = err.errors.map(e => serialize(e, depth + 1))
     }
 
-    for (const key of Object.keys(err)) {
+    for (const key of Object.keys(link)) {
       if (!(key in obj)) {
-        const value = err[key]
+        const value = link[key]
         if (value && typeof value === 'object') {
           obj[key] = serialize(value, depth + 1)
         } else {
@@ -202,11 +237,13 @@ function formatJSON(error, { indent }) {
  * @returns {string} HTML string
  */
 function formatHTML(error) {
+  /** @type {(value: string) => string} */
   const escapeHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
   let html = '<div class="error-chain">\n'
   const seen = new Set()
-  let current = error
+  // Same reason as the terminal walker: a `cause` is any thrown value.
+  let current = /** @type {ChainLink|undefined} */ (error)
 
   // Same cycle guard as the terminal walker: a circular cause would grow this
   // string until the process aborts.
