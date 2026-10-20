@@ -14,7 +14,8 @@ export interface ErrorBoundaryOptions {
   captureStack?: boolean
 }
 
-export { Result, TrapOptions } from './result.js'
+// Types only: boundary.js re-exports nothing from result.js at runtime.
+export type { Result, TrapOptions } from './result.js'
 import { Result, TrapOptions } from './result.js'
 
 /**

@@ -6,10 +6,14 @@ import { ErrorGroup, ErrorGroupOptions } from './group.js'
 import { Result, TrapOptions } from './result.js'
 import { format } from './format.js'
 
-export { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
+// ErrorBoundary is exported as a type only: errs.js deliberately does not
+// re-export the class, so `new ErrorBoundary()` from the root would throw at
+// import time. Use `errs.boundary()`, or import the class from 'errs/boundary'.
+export type { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
 export type { ErrorGroupOptions } from './group.js'
 export type { AggregateResult, Result, TrapOptions } from './result.js'
-export { format, FormatOptions } from './format.js'
+export { format } from './format.js'
+export type { FormatOptions } from './format.js'
 
 /**
  * Options for creating an error
@@ -20,6 +24,27 @@ export interface ErrorOptions {
   cause?: Error
   [key: string]: unknown
 }
+
+/**
+ * An error constructor: a registrable error type, or a class to match against.
+ *
+ * The parameters are `any[]` rather than `unknown[]` because parameters are
+ * contravariant: an `unknown[]` signature rejects every subclass that declares
+ * a typed constructor, which is to say every real error class. `never[]` would
+ * accept them, but would then reject `new registered.myError('boom')`.
+ */
+// biome-ignore lint/suspicious/noExplicitAny: see above; unknown[] rejects every real error subclass
+export type ErrorTypeConstructor<E extends Error = Error> = new (...args: any[]) => E
+
+/**
+ * Anything create() accepts in its options slot: a message string, an array of
+ * message parts, an options object, or a thunk returning one of those.
+ */
+export type CreateInput =
+  | string
+  | string[]
+  | ErrorOptions
+  | (() => string | string[] | ErrorOptions)
 
 /**
  * Result from parallel operation
@@ -52,7 +77,7 @@ export interface ParallelOptions extends ErrorBoundaryOptions {
 /**
  * Registry of custom error types
  */
-export const registered: Record<string, new (...args: unknown[]) => Error>
+export const registered: Record<string, ErrorTypeConstructor>
 
 /**
  * Creates a new error instance with the specified type and options
@@ -60,24 +85,17 @@ export const registered: Record<string, new (...args: unknown[]) => Error>
  * @param opts - Options for creating the error
  * @returns The created error
  */
-export function create(
-  type?: string | ErrorOptions | string[] | (() => ErrorOptions),
-  opts?: ErrorOptions
-): Error
-export function create(opts?: ErrorOptions | string | string[] | (() => ErrorOptions)): Error
+export function create(type?: string, opts?: CreateInput): Error
+export function create(opts?: CreateInput): Error
 
 /**
  * Merges an existing error with a new error instance
- * @param err - The error to merge
+ * @param err - The error to merge, which need not be an Error
  * @param type - Registered error type, or options if no type
  * @param opts - Options for creating the error
  * @returns The merged error with cause chain
  */
-export function merge(
-  err: Error | unknown,
-  type?: string | ErrorOptions,
-  opts?: ErrorOptions
-): Error
+export function merge(err: unknown, type?: string | CreateInput, opts?: CreateInput): Error
 
 /**
  * Handles an error by invoking a callback or emitting on an EventEmitter
@@ -87,7 +105,7 @@ export function merge(
  * @returns EventEmitter if no callback provided
  */
 export function handle(
-  error: Error | string | ErrorOptions,
+  error: Error | CreateInput,
   callback?: ((err: Error) => void) | EventEmitter,
   stream?: EventEmitter
 ): EventEmitter | undefined
@@ -97,8 +115,8 @@ export function handle(
  * @param type - Type of the error to register
  * @param proto - Constructor function of the error to register
  */
-export function register(type: string, proto: new (...args: unknown[]) => Error): void
-export function register(proto: new (...args: unknown[]) => Error): void
+export function register(type: string, proto: ErrorTypeConstructor): void
+export function register(proto: ErrorTypeConstructor): void
 
 /**
  * Unregisters an error type
@@ -129,7 +147,7 @@ export function parallel<T>(
  * @param error - The error to convert
  * @returns JSON representation of the error
  */
-export function toJSON(error: Error, seen?: WeakSet<object>): Record<string, unknown>
+export function toJSON(error: Error): Record<string, unknown>
 
 /**
  * Type guard: checks if error is instance of ErrorClass
@@ -139,7 +157,7 @@ export function toJSON(error: Error, seen?: WeakSet<object>): Record<string, unk
  */
 export function isErrorType<E extends Error>(
   error: unknown,
-  ErrorClass: new (...args: unknown[]) => E
+  ErrorClass: ErrorTypeConstructor<E>
 ): error is E
 
 /**
@@ -160,7 +178,7 @@ export function isRegisteredType(error: unknown, typeName: string): boolean
  */
 export function assertErrorType<E extends Error>(
   error: unknown,
-  ErrorClass: new (...args: unknown[]) => E,
+  ErrorClass: ErrorTypeConstructor<E>,
   message?: string
 ): E
 
@@ -227,7 +245,7 @@ export function byName(
  */
 export function pick<E extends Error>(
   input: AggregateError | ErrorBoundary | Iterable<Error> | Error[] | Error | null | undefined,
-  ErrorClass: new (...args: never[]) => E
+  ErrorClass: ErrorTypeConstructor<E>
 ): E[]
 
 declare const errs: {
