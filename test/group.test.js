@@ -470,6 +470,33 @@ describe('ErrorGroup', () => {
     })
   })
 
+  describe('hostile callers', () => {
+    it('throws at the call site when run() is given a non-function', () => {
+      const group = new ErrorGroup()
+      assert.throws(() => group.run(42), { name: 'TypeError' })
+      assert.throws(() => group.run(), { name: 'TypeError' })
+      assert.equal(group.size, 0)
+    })
+
+    it('survives a supplied boundary whose add() throws', async () => {
+      const boundary = new ErrorBoundary()
+      boundary.add = () => {
+        throw new Error('boundary exploded')
+      }
+
+      const group = new ErrorGroup({ boundary })
+      group.run(async () => {
+        throw new Error('task failed')
+      })
+
+      const [, error] = await group.wait()
+      assert.deepEqual(
+        [...error].map(e => e.message),
+        ['task failed']
+      )
+    })
+  })
+
   describe('documented edges', () => {
     it('swallows failures silently if the group is never waited on', async () => {
       // Tasks never reject, so there is no unhandled rejection to alert you.

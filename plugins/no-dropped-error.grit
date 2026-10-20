@@ -19,10 +19,22 @@
 //
 //   // biome-ignore lint/plugin: value is all we need here
 //
-// Scope: this matches `trap`, `trapSync`, `trapAsync` and `errs`-rooted
-// `wait` calls. A bare `wait()` or `mutex.wait()` is not an errs Result, so
-// those are deliberately left alone; the cost is that a group held in a
-// variable named something other than a `g`/`group` prefix is not checked.
+// Scope: this matches `trap`, `trapSync`, `trapAsync` and group-rooted
+// `wait` calls, under `const`, `let` and `var`. A bare `wait()` or an
+// unrelated `mutex.wait()` is not an errs Result, so those are deliberately
+// left alone.
+//
+// Known gaps, all of them deliberate: widening the pattern to cover these
+// costs more in false positives than it buys.
+//
+//   const [v] = await errs['trap'](fn)   // computed member access
+//   const [v, ,] = await errs.trap(fn)   // elided second slot
+//   const { 0: v } = await errs.trap(fn) // index read as a property
+//   const [v] = await myThing.wait()     // receiver with no g/group prefix
+//
+// It also cannot see a Result bound whole and then read only for its value
+// (`const r = await trap(fn); use(r.value)`), which needs type information
+// rather than syntax.
 language js
 
 or {

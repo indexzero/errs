@@ -53,11 +53,19 @@ export function normalize(error) {
 export function result(ok, value, error) {
   const tuple = [value, error]
   Object.defineProperties(tuple, {
-    ok: { value: ok, enumerable: false, configurable: true },
-    value: { value, enumerable: false, configurable: true },
-    error: { value: error, enumerable: false, configurable: true }
+    ok: { value: ok, enumerable: false, configurable: false },
+    value: { value, enumerable: false, configurable: false },
+    error: { value: error, enumerable: false, configurable: false }
   })
-  return /** @type {Result<T>} */ (tuple)
+
+  // Frozen so the two readings cannot disagree. Without this, `result[0] = x`
+  // succeeded while `.value` kept the old value, and `.ok = false` failed
+  // (silently in sloppy mode, loudly in strict) for no visible reason.
+  //
+  // Note that copying a Result does NOT carry the named properties: spread,
+  // structuredClone, Object.assign, Array.from and map/filter/concat all
+  // produce a plain array. Read the properties off the Result itself.
+  return /** @type {Result<T>} */ (Object.freeze(tuple))
 }
 
 /**

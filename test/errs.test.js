@@ -872,6 +872,21 @@ describe('errs', () => {
       assert.match(error.message, /Use trap\(\)/)
     })
 
+    it('toJSON caps recursion depth like the JSON formatter', () => {
+      let deep = new Error('leaf')
+      for (let i = 0; i < 40; i += 1) deep = new Error(`wrap ${i}`, { cause: deep })
+
+      let node = errs.toJSON(deep)
+      let depth = 0
+      while (node?.cause) {
+        node = node.cause
+        depth += 1
+      }
+
+      assert.equal(depth, 11)
+      assert.deepEqual(node, { truncated: true })
+    })
+
     it('parallel does not orphan started promises when refusing mixed input', async () => {
       const rejected = Promise.reject(new Error('orphaned'))
       await assert.rejects(() => errs.parallel([() => 1, rejected]), { name: 'TypeError' })

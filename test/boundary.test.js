@@ -435,6 +435,33 @@ describe('ErrorBoundary', () => {
       assert.equal(boundary.trapSync(() => 1).ok, true)
     })
 
+    it('is frozen, so the two readings cannot disagree', () => {
+      const boundary = new ErrorBoundary()
+      const result = boundary.trapSync(() => 42)
+
+      assert.throws(() => {
+        result[0] = 'changed'
+      }, TypeError)
+      assert.throws(() => result.push('extra'), TypeError)
+      assert.throws(() => {
+        result.ok = false
+      }, TypeError)
+
+      assert.equal(result[0], result.value)
+      assert.equal(result[1], result.error)
+      assert.equal(Object.isFrozen(result), true)
+    })
+
+    it('does not carry the named properties through a copy', () => {
+      const boundary = new ErrorBoundary()
+      const result = boundary.trapSync(() => 42)
+
+      // Documented consequence of the array representation
+      assert.equal([...result].value, undefined)
+      assert.equal(result.map(x => x).value, undefined)
+      assert.equal(Array.from(result).ok, undefined)
+    })
+
     it('leaves the value slot undefined on failure without or', () => {
       const boundary = new ErrorBoundary()
       const { value } = boundary.trapSync(() => {

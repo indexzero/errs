@@ -160,6 +160,12 @@ export class ErrorGroup {
    * @returns {ErrorGroup} This group for chaining
    */
   run(fn) {
+    if (typeof fn !== 'function') {
+      // A programming error at the call site, not a task failure. Collecting
+      // "fn is not a function" into the aggregate would disguise it as one.
+      throw new TypeError(`group.run() expects a function, got ${typeof fn}`)
+    }
+
     /** @type {Task} */
     const task = { index: this.#tasks.length }
     this.#tasks.push(task)
@@ -169,6 +175,10 @@ export class ErrorGroup {
 
   /**
    * Waits for every task, then reports once.
+   *
+   * Tasks a running task adds are waited for too, so a task that keeps
+   * calling run() keeps wait() pending. That matches Go's errgroup, where
+   * Wait returns only once every Go call has returned.
    * @returns {Promise<Result<unknown[]>>} Result whose value is every task's
    *   value in run order, or whose error is an AggregateError of every failure
    */
@@ -216,7 +226,15 @@ export class ErrorGroup {
       const normalized = normalize(error)
       this.#results[task.index] = fail(normalized)
       this.#failures.push(normalized)
-      this.#boundary.add(normalized)
+
+      // A caller-supplied boundary is foreign code. If its add() throws, that
+      // must not escape as an unhandled rejection and lose the real failure,
+      // which is already recorded above.
+      try {
+        this.#boundary.add(normalized)
+      } catch {
+        // The failure is in #failures and #results either way.
+      }
 
       if (this.#cancelOnError && !this.#controller.signal.aborted) {
         const reason = new Error(`group cancelled: ${normalized.message}`)

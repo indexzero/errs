@@ -80,6 +80,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `ErrorGroup` type export, which had no runtime counterpart, is gone.
 - `.gitignore` had `.DS_Store` and `dist/` merged onto one line, so neither was
   ignored.
+- A Result is frozen. `result[0] = x` previously succeeded while `.value` kept
+  the old value, and `.ok = false` failed with no visible reason, so the two
+  readings could disagree.
+- `toJSON()` caps recursion at depth 10, matching the JSON formatter, instead
+  of following a cause chain of any length.
+- `group.run()` throws a TypeError when handed a non-function, rather than
+  collecting "fn is not a function" into the aggregate as though a task failed.
+- A caller-supplied boundary whose `add()` throws no longer turns into a
+  `wait()` rejection that loses the real failure.
 - Terminal format now renders an `AggregateError`'s collected errors as an
   indented list, instead of walking only `cause` and leaving them invisible.
   The footer reports both chain depth and collected count.

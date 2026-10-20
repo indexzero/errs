@@ -6,7 +6,8 @@ console.log('--- v1 and v2 reading the same Result ---\n')
 
 const b = errs.boundary()
 
-// v1.x code, untouched.
+// The v1 *reading* of the Result, untouched. Note the method is trapSync():
+// in v1 this was called trap(), which is now the async door. See MIGRATION.md.
 const v1 = b.trapSync(() => JSON.parse('{"ok":true}'))
 if (v1.ok) {
   console.log('v1 style ->', v1.value)

@@ -264,7 +264,7 @@ async function parallel(tasks, options = {}) {
  * @returns {object} JSON representation of the error
  */
 function toJSON(error) {
-  return serialize(error, new Set())
+  return serialize(error, new Set(), 0)
 }
 
 /**
@@ -277,9 +277,13 @@ function toJSON(error) {
  * failure. Those are shared references in a DAG, not cycles.
  * @param {unknown} value - The value to serialize
  * @param {Set<unknown>} ancestors - Values currently being serialized
+ * @param {number} depth - Current recursion depth
  * @returns {unknown} A JSON-safe representation
  */
-function serialize(value, ancestors) {
+function serialize(value, ancestors, depth) {
+  if (depth > MAX_SERIALIZE_DEPTH) {
+    return { truncated: true }
+  }
   if (value == null || typeof value !== 'object') {
     return value
   }
@@ -292,7 +296,7 @@ function serialize(value, ancestors) {
     const error = /** @type {Record<string, any>} */ (value)
 
     if (Array.isArray(error)) {
-      return error.map(entry => serialize(entry, ancestors))
+      return error.map(entry => serialize(entry, ancestors, depth + 1))
     }
 
     const obj = {
@@ -308,7 +312,7 @@ function serialize(value, ancestors) {
         // Recurse through own properties too: custom metadata can be
         // circular, and copying it by reference leaves output that
         // JSON.stringify cannot serialize.
-        obj[key] = serialize(error[key], ancestors)
+        obj[key] = serialize(error[key], ancestors, depth + 1)
       }
     }
 
@@ -316,10 +320,10 @@ function serialize(value, ancestors) {
     // branch along, and both are non-enumerable when set by the constructor,
     // so the Object.keys() copy above misses them.
     if (error.cause != null) {
-      obj.cause = serialize(error.cause, ancestors)
+      obj.cause = serialize(error.cause, ancestors, depth + 1)
     }
     if (Array.isArray(error.errors)) {
-      obj.errors = error.errors.map(nested => serialize(nested, ancestors))
+      obj.errors = error.errors.map(nested => serialize(nested, ancestors, depth + 1))
     }
 
     return obj
@@ -443,6 +447,9 @@ function tryCatchAsync(fn) {
   return trap(fn)
 }
 
+/** Depth cap for toJSON, matching the JSON formatter */
+const MAX_SERIALIZE_DEPTH = 10
+
 /**
  * Flattens any error-ish input into a plain array of errors.
  *
@@ -487,7 +494,10 @@ function byName(input) {
 
 /**
  * Selects the errors that are instances of a given class.
- * The constructor-based counterpart to byName, and the analogue of Go's errors.As
+ *
+ * The constructor-based counterpart to byName. Unlike Go's errors.As this is
+ * shallow: it matches the listed errors themselves and does not walk their
+ * cause chains.
  * @template {Error} E
  * @param {unknown} input - An AggregateError, boundary, array or iterable of errors
  * @param {new (...args: any[]) => E} ErrorClass - Class to match against

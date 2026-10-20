@@ -198,7 +198,10 @@ const r = await errs.trap(fn); if (r.ok) use(r.value)  // tagged check
 ```
 
 The named properties are non-enumerable, so a Result serializes as a plain
-two-element array.
+two-element array. A Result is frozen, so the two readings can never disagree.
+Copying one does not carry the named properties: spread, `structuredClone`,
+`Object.assign`, `Array.from` and `map`/`filter`/`concat` all produce a plain
+array, so read `.value` and `.error` off the Result itself.
 
 #### `boundary.trap(fn)` / `boundary.trapSync(fn)`
 
@@ -252,6 +255,11 @@ boundary is shared with another group, pre-filled, cleared, or at its
 `maxErrors` cap. The boundary accumulates across groups; the aggregate answers
 "what did my tasks do".
 
+`run()` throws a TypeError if handed anything but a function, since that is a
+call-site mistake rather than a task failure. A task that keeps calling `run()`
+keeps `wait()` pending, matching Go's errgroup, where Wait returns only once
+every Go call has returned.
+
 Two edges worth knowing. A group you never `wait()` on **swallows every failure
 silently**: tasks never reject, so there is no unhandled rejection to alert you.
 And calling `run()` after `wait()` has resolved runs the task anyway, with
@@ -290,7 +298,9 @@ name has no `g`/`group` prefix goes unchecked.
 
 #### Reading the failures
 
-Three ways, none of which need `.errors`:
+Three ways, none of which need `.errors`. Note that `pick()` is shallow: it
+matches the listed errors themselves and does not walk their cause chains the
+way Go's `errors.As` does.
 
 ```js
 const [, err] = await g.wait()
@@ -473,7 +483,7 @@ const err = new Error('Test error')
 err.code = 'TEST_CODE'
 
 const json = errs.toJSON(err)
-// { message: 'Test error', stack: '...', code: 'TEST_CODE' }
+// { name: 'Error', message: 'Test error', stack: '...', code: 'TEST_CODE' }
 ```
 
 ## Named Exports
