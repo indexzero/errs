@@ -20,6 +20,16 @@ export interface ErrorBoundaryOptions {
 export type Result<T> = { ok: true; value: T } | { ok: false; error: Error }
 
 /**
+ * Makes an AggregateError iterable over its own `errors` array.
+ *
+ * Defined on the instance rather than via a subclass, so the error's
+ * constructor, name and formatting stay exactly those of AggregateError.
+ * @param aggregate - The aggregate error to make iterable
+ * @returns The same aggregate, now iterable
+ */
+export function makeIterable<T extends AggregateError>(aggregate: T): T & Iterable<Error>
+
+/**
  * ErrorBoundary - Collects errors without immediate throwing
  */
 export class ErrorBoundary {
@@ -57,7 +67,7 @@ export class ErrorBoundary {
    * @param message - Message for the aggregate error
    * @returns AggregateError or null if no errors
    */
-  toAggregateError(message?: string): AggregateError | null
+  toAggregateError(message?: string): (AggregateError & Iterable<Error>) | null
 
   /**
    * Throws an AggregateError if any errors have been collected

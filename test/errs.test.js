@@ -482,4 +482,97 @@ describe('errs', () => {
       assert.equal(bad.error.message, 'rejected')
     })
   })
+  describe('byName()', () => {
+    class TimeoutError extends Error {
+      name = 'TimeoutError'
+    }
+
+    const mixed = () => {
+      const b = errs.boundary()
+      b.add(new TimeoutError('slow one'))
+      b.add(new Error('plain'))
+      b.add(new TimeoutError('slow two'))
+      return b.toAggregateError()
+    }
+
+    it('groups an AggregateError by error name', () => {
+      const { TimeoutError: timeouts = [], Error: plain = [] } = errs.byName(mixed())
+      assert.equal(timeouts.length, 2)
+      assert.equal(plain.length, 1)
+      assert.deepEqual(
+        timeouts.map(e => e.message),
+        ['slow one', 'slow two']
+      )
+    })
+
+    it('destructures missing names to the supplied default', () => {
+      const { NotFoundError = [] } = errs.byName(mixed())
+      assert.deepEqual(NotFoundError, [])
+    })
+
+    it('accepts a plain array of errors', () => {
+      const grouped = errs.byName([new TimeoutError('a'), new Error('b')])
+      assert.equal(grouped.TimeoutError.length, 1)
+      assert.equal(grouped.Error.length, 1)
+    })
+
+    it('accepts a single error', () => {
+      assert.equal(errs.byName(new TimeoutError('solo')).TimeoutError.length, 1)
+    })
+
+    it('does not depend on the aggregate being iterable', () => {
+      const bare = new AggregateError([new TimeoutError('a')], 'bare')
+      assert.equal(typeof bare[Symbol.iterator], 'undefined')
+      assert.equal(errs.byName(bare).TimeoutError.length, 1)
+    })
+
+    it('returns an empty record for empty and non-error input', () => {
+      assert.deepEqual(errs.byName(null), {})
+      assert.deepEqual(errs.byName(undefined), {})
+      assert.deepEqual(errs.byName([]), {})
+      assert.deepEqual(errs.byName('not an error'), {})
+      assert.deepEqual(errs.byName(42), {})
+    })
+
+    it('falls back to Error for a nameless error', () => {
+      const nameless = new Error('x')
+      nameless.name = ''
+      assert.equal(errs.byName([nameless]).Error.length, 1)
+    })
+  })
+
+  describe('pick()', () => {
+    class TimeoutError extends Error {
+      name = 'TimeoutError'
+    }
+    class NotFoundError extends Error {
+      name = 'NotFoundError'
+    }
+
+    const mixed = () => {
+      const b = errs.boundary()
+      b.add(new TimeoutError('slow'))
+      b.add(new NotFoundError('gone'))
+      b.add(new Error('plain'))
+      return b.toAggregateError()
+    }
+
+    it('selects by constructor', () => {
+      assert.equal(errs.pick(mixed(), TimeoutError).length, 1)
+      assert.equal(errs.pick(mixed(), NotFoundError).length, 1)
+    })
+
+    it('matches subclasses, since it uses instanceof', () => {
+      assert.equal(errs.pick(mixed(), Error).length, 3)
+    })
+
+    it('returns an empty array when nothing matches', () => {
+      class Unused extends Error {}
+      assert.deepEqual(errs.pick(mixed(), Unused), [])
+    })
+
+    it('returns an empty array for empty input', () => {
+      assert.deepEqual(errs.pick(null, Error), [])
+    })
+  })
 })

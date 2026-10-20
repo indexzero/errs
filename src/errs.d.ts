@@ -159,6 +159,29 @@ export function tryCatch<T>(fn: () => T): Result<T>
  */
 export function tryCatchAsync<T>(fn: () => Promise<T>): Promise<Result<T>>
 
+/**
+ * Groups errors by their `name`, for destructuring by type
+ * @param input - An AggregateError, boundary, array or iterable of errors
+ * @returns Errors keyed by name, in encounter order
+ * @example
+ * const { TimeoutError = [], NotFoundError = [] } = errs.byName(aggregate)
+ */
+export function byName(
+  input: AggregateError | Iterable<Error> | Error[] | Error | null | undefined
+): Record<string, Error[]>
+
+/**
+ * Selects the errors that are instances of a given class.
+ * The constructor-based counterpart to byName
+ * @param input - An AggregateError, boundary, array or iterable of errors
+ * @param ErrorClass - Class to match against
+ * @returns Matching errors, in encounter order
+ */
+export function pick<E extends Error>(
+  input: AggregateError | Iterable<Error> | Error[] | Error | null | undefined,
+  ErrorClass: new (...args: never[]) => E
+): E[]
+
 declare const errs: {
   registered: typeof registered
   create: typeof create
@@ -175,6 +198,8 @@ declare const errs: {
   assertErrorType: typeof assertErrorType
   tryCatch: typeof tryCatch
   tryCatchAsync: typeof tryCatchAsync
+  byName: typeof byName
+  pick: typeof pick
 }
 
 export default errs

@@ -7,6 +7,29 @@
  */
 
 /**
+ * Makes an AggregateError iterable over its own `errors` array.
+ *
+ * Defined on the instance rather than via a subclass so that the error's
+ * constructor, name and formatting stay exactly those of AggregateError.
+ * The property is non-enumerable, so serialization is unchanged.
+ * @template {AggregateError} T
+ * @param {T} aggregate - The aggregate error to make iterable
+ * @returns {T} The same aggregate, now iterable
+ */
+export function makeIterable(aggregate) {
+  if (typeof aggregate?.[Symbol.iterator] === 'function') return aggregate
+  Object.defineProperty(aggregate, Symbol.iterator, {
+    value: function* () {
+      yield* this.errors ?? []
+    },
+    writable: true,
+    configurable: true,
+    enumerable: false
+  })
+  return aggregate
+}
+
+/**
  * ErrorBoundary - Collects errors without immediate throwing
  */
 export class ErrorBoundary {
@@ -71,12 +94,16 @@ export class ErrorBoundary {
 
   /**
    * Converts collected errors to an AggregateError
+   *
+   * The returned error is iterable over its own `errors`, so `for..of`,
+   * spread and array destructuring all work on it directly. `instanceof
+   * AggregateError` and the `errors` property are unaffected.
    * @param {string} [message='Multiple errors occurred'] - Message for the aggregate error
    * @returns {AggregateError|null} AggregateError or null if no errors
    */
   toAggregateError(message = 'Multiple errors occurred') {
     if (!this.hasErrors()) return null
-    const aggregate = new AggregateError(this.#errors, message)
+    const aggregate = makeIterable(new AggregateError(this.#errors, message))
     if (this.#createdAt) {
       aggregate.cause = this.#createdAt
     }

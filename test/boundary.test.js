@@ -8,7 +8,7 @@
 
 import { strict as assert } from 'node:assert'
 import { describe, it } from 'node:test'
-import { ErrorBoundary } from '../src/boundary.js'
+import { ErrorBoundary, makeIterable } from '../src/boundary.js'
 
 describe('ErrorBoundary', () => {
   describe('constructor', () => {
@@ -141,6 +141,58 @@ describe('ErrorBoundary', () => {
       const aggregate = boundary.toAggregateError()
       assert(aggregate.cause instanceof Error)
       assert.match(aggregate.cause.message, /ErrorBoundary created/)
+    })
+  })
+
+  describe('iterable AggregateError', () => {
+    const twoErrors = () => {
+      const boundary = new ErrorBoundary()
+      boundary.add(new Error('first'))
+      boundary.add(new Error('second'))
+      return boundary.toAggregateError()
+    }
+
+    it('spreads into an array of errors', () => {
+      assert.deepEqual(
+        [...twoErrors()].map(e => e.message),
+        ['first', 'second']
+      )
+    })
+
+    it('supports for..of', () => {
+      const seen = []
+      for (const error of twoErrors()) seen.push(error.message)
+      assert.deepEqual(seen, ['first', 'second'])
+    })
+
+    it('array destructures in order', () => {
+      const [first, second] = twoErrors()
+      assert.equal(first.message, 'first')
+      assert.equal(second.message, 'second')
+    })
+
+    it('leaves instanceof and the errors property intact', () => {
+      const aggregate = twoErrors()
+      assert(aggregate instanceof AggregateError)
+      assert.equal(aggregate.constructor, AggregateError)
+      assert.equal(aggregate.name, 'AggregateError')
+      assert.equal(aggregate.errors.length, 2)
+    })
+
+    it('keeps the iterator non-enumerable so serialization is unchanged', () => {
+      const aggregate = twoErrors()
+      // `errors` is a non-enumerable own property per spec, and a symbol key
+      // never shows up in Object.keys. The lone enumerable key is `cause`,
+      // which toAggregateError sets by plain assignment.
+      assert.deepEqual(Object.keys(aggregate), ['cause'])
+      assert.equal(Object.getOwnPropertyDescriptor(aggregate, Symbol.iterator).enumerable, false)
+      assert.doesNotThrow(() => JSON.stringify(aggregate))
+    })
+
+    it('is idempotent', () => {
+      const aggregate = twoErrors()
+      const iterator = aggregate[Symbol.iterator]
+      assert.equal(makeIterable(aggregate)[Symbol.iterator], iterator)
     })
   })
 

@@ -280,6 +280,53 @@ async function tryCatchAsync(fn) {
   }
 }
 
+/**
+ * Flattens any error-ish input into a plain array of errors.
+ *
+ * Accepts an AggregateError, an ErrorBoundary, an array, any iterable of
+ * errors, or a single Error. Reads `errors` directly where present, so it
+ * does not depend on the aggregate being iterable.
+ * @param {unknown} input - The error, aggregate, boundary or collection
+ * @returns {Error[]} Flat array of errors, empty if there are none
+ */
+function toErrorList(input) {
+  if (input == null) return []
+  if (Array.isArray(input)) return input
+  if (typeof input !== 'object') return []
+  if (Array.isArray(input.errors)) return input.errors
+  if (typeof input[Symbol.iterator] === 'function') return [...input]
+  return input instanceof Error ? [input] : []
+}
+
+/**
+ * Groups errors by their `name`, for destructuring by type
+ * @param {unknown} input - An AggregateError, boundary, array or iterable of errors
+ * @returns {Record<string, Error[]>} Errors keyed by name, in encounter order
+ * @example
+ * const { TimeoutError = [], NotFoundError = [] } = errs.byName(aggregate)
+ */
+function byName(input) {
+  const grouped = {}
+  for (const error of toErrorList(input)) {
+    const key = error?.name || 'Error'
+    grouped[key] ??= []
+    grouped[key].push(error)
+  }
+  return grouped
+}
+
+/**
+ * Selects the errors that are instances of a given class.
+ * The constructor-based counterpart to byName, and the analogue of Go's errors.As
+ * @template {Error} E
+ * @param {unknown} input - An AggregateError, boundary, array or iterable of errors
+ * @param {new (...args: any[]) => E} ErrorClass - Class to match against
+ * @returns {E[]} Matching errors, in encounter order
+ */
+function pick(input, ErrorClass) {
+  return toErrorList(input).filter(error => error instanceof ErrorClass)
+}
+
 export default {
   registered,
   create,
@@ -295,7 +342,9 @@ export default {
   isRegisteredType,
   assertErrorType,
   tryCatch,
-  tryCatchAsync
+  tryCatchAsync,
+  byName,
+  pick
 }
 
 export {
@@ -313,5 +362,7 @@ export {
   isRegisteredType,
   assertErrorType,
   tryCatch,
-  tryCatchAsync
+  tryCatchAsync,
+  byName,
+  pick
 }
