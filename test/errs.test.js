@@ -809,6 +809,23 @@ describe('errs', () => {
       })
     })
   })
+  describe('declared arity matches runtime arity', () => {
+    // The type-level half of this lives in test/types/conformance.ts. Neither
+    // conformance direction catches a declaration that adds an optional
+    // parameter the implementation does not take, because a function of fewer
+    // parameters is assignable to one expected to take more. `toJSON` drifted
+    // that way once, and every gate stayed green.
+    it('pins the parameter count of each exported function', () => {
+      assert.equal(errs.toJSON.length, 1)
+      assert.equal(errs.byName.length, 1)
+      assert.equal(errs.pick.length, 2)
+      assert.equal(errs.trap.length, 1)
+      assert.equal(errs.trapSync.length, 1)
+      assert.equal(errs.group.length, 1)
+      assert.equal(errs.boundary.length, 1)
+    })
+  })
+
   describe('review regressions', () => {
     it('toJSON works as a bare callback', () => {
       // A `seen` parameter in the public signature made Array#map pass the

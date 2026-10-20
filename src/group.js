@@ -15,6 +15,14 @@ import { fail, normalize, ok } from './result.js'
  */
 
 /**
+ * A Result whose error, when present, is an iterable AggregateError.
+ * Kept in step with the AggregateResult alias in group.d.ts; the conformance
+ * check in test/types compares the two.
+ * @template T
+ * @typedef {([T, undefined] & { ok: true, value: T, error: undefined }) | ([T|undefined, AggregateError & Iterable<Error>] & { ok: false, value: T|undefined, error: AggregateError & Iterable<Error> })} AggregateResult
+ */
+
+/**
  * @typedef {{ index: number, promise?: Promise<void> }} Task
  */
 
@@ -179,8 +187,9 @@ export class ErrorGroup {
    * Tasks a running task adds are waited for too, so a task that keeps
    * calling run() keeps wait() pending. That matches Go's errgroup, where
    * Wait returns only once every Go call has returned.
-   * @returns {Promise<Result<unknown[]>>} Result whose value is every task's
-   *   value in run order, or whose error is an AggregateError of every failure
+   * @returns {Promise<AggregateResult<unknown[]>>} Result whose value is every
+   *   task's value in run order, or whose error is an AggregateError of every
+   *   failure
    */
   async wait() {
     // Loop rather than awaiting a single snapshot, so a task that calls
@@ -198,14 +207,20 @@ export class ErrorGroup {
     // tasks failed", and could drop a failure from the aggregate silently.
     const failed = this.#failures.length
     if (failed === 0) {
-      return ok(this.#results.map(result => result.value))
+      return /** @type {AggregateResult<unknown[]>} */ (
+        ok(this.#results.map(result => result.value))
+      )
     }
 
     const total = this.#tasks.length
     const label = total === 1 ? 'task' : 'tasks'
     const message = `${failed} of ${total} ${label} failed`
 
-    return fail(makeIterable(new AggregateError([...this.#failures], message)))
+    // Cast because fail() is generic over the value, not the error; the
+    // aggregate is iterable by construction via makeIterable.
+    return /** @type {AggregateResult<unknown[]>} */ (
+      fail(makeIterable(new AggregateError([...this.#failures], message)))
+    )
   }
 
   /**

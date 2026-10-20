@@ -281,12 +281,13 @@ function warnAboutPromises() {
  * `signal` apply. An array of already-started promises still works and
  * keeps the v1 behaviour, but warns once, because neither option can
  * apply to work that is already running.
- * @param {Array<(signal: AbortSignal) => unknown>|Promise<unknown>[]} tasks - Thunks or promises
+ * @template T
+ * @param {Array<(signal: AbortSignal) => T|Promise<T>>|Promise<T>[]} tasks - Thunks or promises
  * @param {import('./group.js').ErrorGroupOptions} [options] - Options; `limit`,
  *   `signal` and `cancelOnError` apply to thunks only, and `boundary` collects
  *   into an existing boundary. Typed by the shape ErrorGroup and ErrorBoundary
  *   accept, because the options are forwarded to them verbatim.
- * @returns {Promise<{results: PromiseSettledResult<unknown>[], boundary: ErrorBoundary}>}
+ * @returns {Promise<{results: PromiseSettledResult<T>[], boundary: ErrorBoundary}>}
  *   Results and boundary
  */
 async function parallel(tasks, options = {}) {
@@ -300,11 +301,18 @@ async function parallel(tasks, options = {}) {
     }
     await errorGroup.wait()
 
-    /** @type {PromiseSettledResult<unknown>[]} */
+    // Cast per element: the group's results are Result<unknown>, and the
+    // status strings need their literal types to form PromiseSettledResult.
     const results = errorGroup.results.map(result =>
       result.ok
-        ? { status: 'fulfilled', value: result.value }
-        : { status: 'rejected', reason: result.error }
+        ? /** @type {PromiseFulfilledResult<T>} */ ({
+            status: 'fulfilled',
+            value: /** @type {T} */ (result.value)
+          })
+        : /** @type {PromiseRejectedResult} */ ({
+            status: 'rejected',
+            reason: result.error
+          })
     )
     return { results, boundary: errorGroup.boundary }
   }
@@ -326,7 +334,9 @@ async function parallel(tasks, options = {}) {
   }
 
   warnAboutPromises()
-  const results = await Promise.allSettled(list)
+  const results = /** @type {PromiseSettledResult<T>[]} */ (
+    await Promise.allSettled(/** @type {Promise<T>[]} */ (list))
+  )
   const errorBoundary = options.boundary ?? new ErrorBoundary(options)
 
   for (const result of results) {

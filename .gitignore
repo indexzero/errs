@@ -3,3 +3,4 @@ coverage/
 *.log
 .DS_Store
 dist/
+.types-gen/

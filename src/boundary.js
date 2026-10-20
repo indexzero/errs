@@ -21,15 +21,16 @@ import { fail, normalize, ok } from './result.js'
  * The property is non-enumerable, so serialization is unchanged.
  * @template {AggregateError} T
  * @param {T} aggregate - The aggregate error to make iterable
- * @returns {T} The same aggregate, now iterable
+ * @returns {T & Iterable<Error>} The same aggregate, now iterable
  */
 export function makeIterable(aggregate) {
-  if (aggregate == null) return aggregate
+  const iterable = /** @type {T & Iterable<Error>} */ (aggregate)
+  if (aggregate == null) return iterable
   const existing = /** @type {{ [Symbol.iterator]?: unknown }} */ (
     /** @type {unknown} */ (aggregate)
   )[Symbol.iterator]
-  if (typeof existing === 'function') return aggregate
-  if (!Object.isExtensible(aggregate)) return aggregate
+  if (typeof existing === 'function') return iterable
+  if (!Object.isExtensible(aggregate)) return iterable
   Object.defineProperty(aggregate, Symbol.iterator, {
     value: function* () {
       yield* this.errors ?? []
@@ -38,7 +39,7 @@ export function makeIterable(aggregate) {
     configurable: true,
     enumerable: false
   })
-  return aggregate
+  return iterable
 }
 
 /**
@@ -112,7 +113,7 @@ export class ErrorBoundary {
    * spread and array destructuring all work on it directly. `instanceof
    * AggregateError` and the `errors` property are unaffected.
    * @param {string} [message='Multiple errors occurred'] - Message for the aggregate error
-   * @returns {AggregateError|null} AggregateError or null if no errors
+   * @returns {(AggregateError & Iterable<Error>)|null} The aggregate, or null if no errors
    */
   toAggregateError(message = 'Multiple errors occurred') {
     if (!this.hasErrors()) return null
