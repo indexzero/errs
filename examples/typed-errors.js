@@ -1,5 +1,5 @@
 // Registered error types meet the error slot.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- dispatching on the error slot ---\n')
 

@@ -1,5 +1,5 @@
 // group({ signal }): cancellation from the outside, including deadlines.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- external AbortSignal as a deadline ---\n')
 

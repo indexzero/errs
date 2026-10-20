@@ -1,6 +1,6 @@
 // trap(): one call, three ways to read the result.
 // Always returns a Promise<Result<T>>, so `await` is never optional.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- trap(): reading a Result ---\n')
 

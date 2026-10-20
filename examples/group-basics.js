@@ -1,5 +1,5 @@
 // group(): bounded concurrency with error collection. This is errgroup.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- group(): the group owns the launch ---\n')
 

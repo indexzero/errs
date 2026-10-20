@@ -1,6 +1,6 @@
 // Migrating from v1. The Result is an array that also has properties,
 // so old call sites keep working next to new ones.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- v1 and v2 reading the same Result ---\n')
 

@@ -12,6 +12,14 @@
       "types": "./src/boundary.d.ts",
       "import": "./src/boundary.js"
     },
+    "./group": {
+      "types": "./src/group.d.ts",
+      "import": "./src/group.js"
+    },
+    "./result": {
+      "types": "./src/result.d.ts",
+      "import": "./src/result.js"
+    },
     "./format": {
       "types": "./src/format.d.ts",
       "import": "./src/format.js"

@@ -7,7 +7,8 @@ Simple error creation, boundaries, and formatting utilities for modern Node.js a
 - **Simple Error Creation** - Create errors with custom properties in one line
 - **Error Boundaries** - Collect errors without immediate throwing
 - **Type Guards** - Runtime type checking for errors with TypeScript support
-- **Result Pattern** - Rust-style `tryCatch` for exception-free error handling
+- **Go-style Results** - `trap()` returns `[value, error]` instead of throwing
+- **Bounded Concurrency** - `group()` runs thunks with a limit and cancellation
 - **Multi-Format Output** - Format errors for terminal, JSON, or HTML
 - **Native Cause Chains** - Built-in support for ES2022 `Error.cause`
 - **Error Type Registration** - Register and reuse custom error types
@@ -154,33 +155,103 @@ boundary.clear()
 - `toAggregateError(message)` - Convert to AggregateError
 - `throwIfErrors(message)` - Throw if errors exist
 - `clear()` - Remove all errors
-- `trap(fn)` - Execute sync function, trap errors to boundary
-- `trapAsync(fn)` - Execute async function, trap errors to boundary
+- `trap(fn, options)` - Execute any function, trap errors to boundary. Always async
+- `trapSync(fn, options)` - Synchronous trap, returns a Result directly
+- `trapAsync(fn, options)` - Deprecated alias of `trap()`
 
-#### `boundary.trap(fn)` / `boundary.trapAsync(fn)`
+The aggregate from `toAggregateError()` is iterable over its own errors, so
+`for..of`, spread and array destructuring work on it without an `.errors` hop.
 
-Execute functions and automatically collect errors without throwing.
+#### `errs.trap(fn)` / `errs.trapSync(fn)`
+
+Execute a function and get a Result back instead of a throw.
+
+```js
+const [user, err] = await errs.trap(() => fetchUser(1))
+if (err) return [undefined, err]
+```
+
+`trap()` always returns a Promise, whether `fn` is sync, async, or a plain
+function returning a promise. The synchronous door is a separate method rather
+than a second return shape, so there is no sync-or-async return to guess at.
+A forgotten `await` throws a TypeError on destructuring rather than going quiet.
+
+```js
+const [config, err] = errs.trapSync(() => JSON.parse(raw))
+
+// `or` supplies Go's zero value, so the value slot is usable on failure
+const [config] = errs.trapSync(() => JSON.parse(raw), { or: defaults })
+```
+
+#### The Result shape
+
+One object, three readings. **Order is value first, error last**, following Go
+rather than Node's error-first callbacks.
+
+```js
+const [value, error] = await errs.trap(fn)  // tuple
+const { value, error } = await errs.trap(fn)  // named properties
+const r = await errs.trap(fn); if (r.ok) use(r.value)  // tagged check
+```
+
+The named properties are non-enumerable, so a Result serializes as a plain
+two-element array.
+
+#### `boundary.trap(fn)` / `boundary.trapSync(fn)`
+
+The same thing, but every error also lands in the boundary, so you can collect
+across many calls and report once.
 
 ```js
 const boundary = errs.boundary()
 
-// Sync operations
-const result = boundary.trap(() => JSON.parse(userInput))
-if (result.ok) {
-  console.log('Parsed:', result.value)
-} else {
-  console.log('Parse failed, error collected')
+for (const row of rows) {
+  const [record, err] = boundary.trapSync(() => JSON.parse(row))
+  if (!err) records.push(record)
 }
 
-// Async operations
-const fetched = await boundary.trapAsync(() => fetch(url))
-if (fetched.ok) {
-  const data = await fetched.value.json()
+boundary.throwIfErrors(`${boundary.count} rows failed to parse`)
+```
+
+### Concurrency
+
+#### `errs.group(options)`
+
+Runs thunks with bounded concurrency, collecting every failure rather than
+rejecting on the first. The group owns the launch, which is what lets a limit
+and a cancellation signal apply at all.
+
+```js
+const g = errs.group({ limit: 4, cancelOnError: true })
+
+for (const id of ids) {
+  g.run(signal => fetchUser(id, { signal }))
 }
 
-// Process multiple and handle all errors at once
-items.forEach(item => boundary.trap(() => processItem(item)))
-boundary.throwIfErrors('Batch processing failed')
+const [users, err] = await g.wait()
+if (err) throw err  // AggregateError carrying every failure
+```
+
+Options are `limit`, `signal`, `cancelOnError`, and `boundary`. `run()` hands
+each thunk the group's signal, so forwarding it is the caller's job: a thunk
+that ignores it cannot be cancelled. `wait()` keeps strict Result semantics, so
+its value slot is `undefined` when anything failed; per-task outcomes live on
+`g.results` as a `Result[]` in run order.
+
+With `cancelOnError`, the abort reason is an Error named `AbortError` whose
+`cause` is the original failure, so siblings report why they stopped instead of
+repeating the root error.
+
+#### Reading the failures
+
+Three ways, none of which need `.errors`:
+
+```js
+const [, err] = await g.wait()
+
+for (const e of err) { }                       // iterable aggregate
+const { TimeoutError = [] } = errs.byName(err)  // destructure by name
+const timeouts = errs.pick(err, TimeoutError)   // select by constructor
 ```
 
 ### Type Guards
@@ -224,46 +295,25 @@ function handleHttpError(err) {
 }
 ```
 
-### Result Pattern
+### Deprecated aliases
 
-#### `errs.tryCatch(fn)`
-
-Wraps a sync function to return a Result instead of throwing.
-
-```js
-const result = errs.tryCatch(() => JSON.parse(input))
-if (result.ok) {
-  console.log(result.value)
-} else {
-  console.log('Parse error:', result.error.message)
-}
-```
-
-#### `errs.tryCatchAsync(fn)`
-
-Wraps an async function to return a Result instead of throwing.
-
-```js
-const result = await errs.tryCatchAsync(() => fetch(url))
-if (result.ok) {
-  const data = await result.value.json()
-} else {
-  console.log('Fetch failed:', result.error.message)
-}
-```
+`tryCatch` is an alias of `trapSync()` and `tryCatchAsync` is an alias of
+`trap()`. Both still work and return the same hybrid Result, so existing
+`result.ok` and `result.value` call sites are unaffected. They are removed in
+the next major.
 
 ### Parallel Operations
 
-#### `errs.parallel(promises, options)`
+#### `errs.parallel(tasks, options)`
 
-Run multiple promises and collect all errors.
+Run multiple tasks and collect all errors. Prefer thunks, which the group
+launches itself so that `limit` and `signal` apply.
 
 ```js
-const { results, boundary } = await errs.parallel([
-  fetchUser(1),
-  fetchUser(2),
-  fetchUser(3)
-])
+const { results, boundary } = await errs.parallel(
+  [1, 2, 3].map(id => signal => fetchUser(id, { signal })),
+  { limit: 2 }
+)
 
 // Get successful values
 const users = results
@@ -275,6 +325,11 @@ if (boundary.hasErrors()) {
   console.error(`${boundary.count} requests failed`)
 }
 ```
+
+An array of already-started promises still works and keeps the v1 behaviour,
+but warns once: neither `limit` nor `signal` can apply to work that is already
+in flight. Reach for `errs.group()` directly when you want the Result tuple and
+per-task outcomes rather than settled-style results.
 
 ### Error Formatting
 
@@ -385,16 +440,22 @@ import {
   boundary,
   format,
   parallel,
+  group,
+  trap,
+  trapSync,
+  byName,
+  pick,
   isErrorType,
   isRegisteredType,
   assertErrorType,
-  tryCatch,
-  tryCatchAsync
+  trap,
+  trapSync,
+  group
 } from 'errs'
 
 const err = create('Error message')
 const bound = boundary()
-const result = tryCatch(() => JSON.parse(data))
+const [parsed, parseErr] = trapSync(() => JSON.parse(data))
 ```
 
 ## Subpath Exports
@@ -403,6 +464,8 @@ Import specific modules directly:
 
 ```js
 import { ErrorBoundary } from 'errs/boundary'
+import { ErrorGroup } from 'errs/group'
+import { ok, fail } from 'errs/result'
 import { format } from 'errs/format'
 ```
 

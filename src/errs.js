@@ -9,6 +9,8 @@
 import { EventEmitter } from 'node:events'
 import { ErrorBoundary } from './boundary.js'
 import { format } from './format.js'
+import { ErrorGroup } from './group.js'
+import { fail, normalize, ok } from './result.js'
 
 const registered = {}
 
@@ -167,13 +169,78 @@ function boundary(options) {
 }
 
 /**
- * Runs multiple promises in parallel and collects errors
- * @param {Promise[]} promises - Array of promises to run
- * @param {object} [options] - Options including optional boundary
+ * Creates an ErrorGroup for bounded, cancellable concurrency
+ * @param {object} [options] - Options for the group
+ * @returns {ErrorGroup} The error group instance
+ */
+function group(options) {
+  return new ErrorGroup(options)
+}
+
+let warnedAboutPromises = false
+
+/**
+ * Warns once that started promises cannot be bounded or cancelled
+ */
+function warnAboutPromises() {
+  if (warnedAboutPromises) return
+  warnedAboutPromises = true
+
+  const message =
+    'errs.parallel() was given started promises. Pass thunks (() => work()) ' +
+    'so that `limit` and `signal` can apply; work already in flight cannot ' +
+    'be bounded or cancelled.'
+
+  if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
+    process.emitWarning(message, 'DeprecationWarning')
+  } else {
+    console.warn(message)
+  }
+}
+
+/**
+ * Runs multiple tasks concurrently and collects every error.
+ *
+ * Prefers thunks, which the group launches itself so that `limit` and
+ * `signal` apply. An array of already-started promises still works and
+ * keeps the v1 behaviour, but warns once, because neither option can
+ * apply to work that is already running.
+ * @param {Array<(signal: AbortSignal) => unknown>|Promise[]} tasks - Thunks or promises
+ * @param {object} [options] - Options
+ * @param {number} [options.limit] - Maximum tasks in flight, thunks only
+ * @param {AbortSignal} [options.signal] - Cancellation signal, thunks only
+ * @param {boolean} [options.cancelOnError] - Abort siblings on first failure, thunks only
+ * @param {ErrorBoundary} [options.boundary] - Boundary to collect into
  * @returns {Promise<{results: Array, boundary: ErrorBoundary}>} Results and boundary
  */
-async function parallel(promises, options = {}) {
-  const results = await Promise.allSettled(promises)
+async function parallel(tasks, options = {}) {
+  const list = [...tasks]
+  const thunks = list.filter(task => typeof task === 'function')
+
+  if (thunks.length === list.length) {
+    const errorGroup = new ErrorGroup(options)
+    for (const fn of list) {
+      errorGroup.run(/** @type {(signal: AbortSignal) => unknown} */ (fn))
+    }
+    await errorGroup.wait()
+
+    const results = errorGroup.results.map(result =>
+      result.ok
+        ? { status: 'fulfilled', value: result.value }
+        : { status: 'rejected', reason: result.error }
+    )
+    return { results, boundary: errorGroup.boundary }
+  }
+
+  if (thunks.length > 0) {
+    throw new TypeError(
+      `parallel() takes either all thunks or all promises, got ${thunks.length} ` +
+        `thunk(s) among ${list.length} tasks`
+    )
+  }
+
+  warnAboutPromises()
+  const results = await Promise.allSettled(list)
   const errorBoundary = options.boundary ?? new ErrorBoundary(options)
 
   for (const result of results) {
@@ -253,31 +320,61 @@ function assertErrorType(error, ErrorClass, message) {
  */
 
 /**
- * Wraps a sync function to return Result instead of throwing
+ * Executes fn and returns a Result instead of throwing.
+ *
+ * Always returns a Promise, whether fn is sync, async, or a plain function
+ * returning a promise. No boundary is involved, so nothing accumulates:
+ * use boundary.trap() to collect across several calls.
  * @template T
- * @param {() => T} fn - Function to execute
- * @returns {Result<T>} Result containing value or error
+ * @param {() => T|Promise<T>} fn - Function to execute
+ * @param {object} [options] - Options
+ * @param {T} [options.or] - Value for the first slot on failure, Go's zero value
+ * @returns {Promise<Result<T>>} Promise of a Result
  */
-function tryCatch(fn) {
+async function trap(fn, options = {}) {
   try {
-    return { ok: true, value: fn() }
+    return ok(await fn())
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) }
+    return fail(normalize(error), options.or)
   }
 }
 
 /**
- * Wraps an async function to return Result instead of throwing
+ * Synchronous trap. Returns a Result directly rather than a promise.
+ * @template T
+ * @param {() => T} fn - Function to execute
+ * @param {object} [options] - Options
+ * @param {T} [options.or] - Value for the first slot on failure, Go's zero value
+ * @returns {Result<T>} The Result
+ */
+function trapSync(fn, options = {}) {
+  try {
+    return ok(fn())
+  } catch (error) {
+    return fail(normalize(error), options.or)
+  }
+}
+
+/**
+ * Alias of trapSync()
+ * @deprecated Use trapSync()
+ * @template T
+ * @param {() => T} fn - Function to execute
+ * @returns {Result<T>} The Result
+ */
+function tryCatch(fn) {
+  return trapSync(fn)
+}
+
+/**
+ * Alias of trap()
+ * @deprecated Use trap(), which is async for every kind of function
  * @template T
  * @param {() => Promise<T>} fn - Async function to execute
- * @returns {Promise<Result<T>>} Promise of Result containing value or error
+ * @returns {Promise<Result<T>>} Promise of a Result
  */
-async function tryCatchAsync(fn) {
-  try {
-    return { ok: true, value: await fn() }
-  } catch (error) {
-    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) }
-  }
+function tryCatchAsync(fn) {
+  return trap(fn)
 }
 
 /**
@@ -343,6 +440,9 @@ export default {
   assertErrorType,
   tryCatch,
   tryCatchAsync,
+  trap,
+  trapSync,
+  group,
   byName,
   pick
 }
@@ -363,6 +463,9 @@ export {
   assertErrorType,
   tryCatch,
   tryCatchAsync,
+  trap,
+  trapSync,
+  group,
   byName,
   pick
 }

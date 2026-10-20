@@ -1,5 +1,5 @@
 // boundary.trapSync(): collect every failure, report once at the edge.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- accumulating across a loop ---\n')
 

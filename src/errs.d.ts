@@ -1,8 +1,12 @@
 import { EventEmitter } from 'node:events'
-import { ErrorBoundary, ErrorBoundaryOptions, Result } from './boundary.js'
+import { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
+import { ErrorGroup, ErrorGroupOptions } from './group.js'
+import { Result, TrapOptions } from './result.js'
 import { format } from './format.js'
 
-export { ErrorBoundary, ErrorBoundaryOptions, Result } from './boundary.js'
+export { ErrorBoundary, ErrorBoundaryOptions } from './boundary.js'
+export { ErrorGroup, ErrorGroupOptions } from './group.js'
+export { Result, TrapOptions } from './result.js'
 export { format, FormatOptions } from './format.js'
 
 /**
@@ -28,6 +32,19 @@ export interface ParallelResult<T> {
  */
 export interface ParallelOptions extends ErrorBoundaryOptions {
   boundary?: ErrorBoundary
+  /**
+   * Maximum tasks in flight at once. Thunks only: it cannot apply to
+   * promises that have already started.
+   */
+  limit?: number
+  /**
+   * Cancellation signal. Thunks only, for the same reason.
+   */
+  signal?: AbortSignal
+  /**
+   * Abort the remaining tasks on first failure. Thunks only.
+   */
+  cancelOnError?: boolean
 }
 
 /**
@@ -101,7 +118,7 @@ export function boundary(options?: ErrorBoundaryOptions): ErrorBoundary
  * @returns Results and boundary
  */
 export function parallel<T>(
-  promises: Promise<T>[],
+  tasks: ((signal: AbortSignal) => T | Promise<T>)[] | Promise<T>[],
   options?: ParallelOptions
 ): Promise<ParallelResult<T>>
 
@@ -146,16 +163,45 @@ export function assertErrorType<E extends Error>(
 ): E
 
 /**
- * Wraps a sync function to return Result instead of throwing
+ * Executes fn and returns a Result instead of throwing.
+ *
+ * Always returns a Promise, whether fn is sync, async, or a plain function
+ * returning a promise. No boundary is involved, so nothing accumulates:
+ * use `boundary.trap()` to collect across several calls.
  * @param fn - Function to execute
- * @returns Result containing value or error
+ * @param options - Options, including `or` for the failure value
+ * @returns Promise of a Result
+ */
+export function trap<T>(fn: () => T | Promise<T>, options?: TrapOptions<T>): Promise<Result<T>>
+
+/**
+ * Synchronous trap. Returns a Result directly rather than a promise.
+ * @param fn - Function to execute
+ * @param options - Options, including `or` for the failure value
+ * @returns The Result
+ */
+export function trapSync<T>(fn: () => T, options?: TrapOptions<T>): Result<T>
+
+/**
+ * Creates an ErrorGroup for bounded, cancellable concurrency
+ * @param options - Options for the group
+ * @returns The error group instance
+ */
+export function group(options?: ErrorGroupOptions): ErrorGroup
+
+/**
+ * Alias of trapSync()
+ * @deprecated Use trapSync()
+ * @param fn - Function to execute
+ * @returns The Result
  */
 export function tryCatch<T>(fn: () => T): Result<T>
 
 /**
- * Wraps an async function to return Result instead of throwing
+ * Alias of trap()
+ * @deprecated Use trap(), which is async for every kind of function
  * @param fn - Async function to execute
- * @returns Promise of Result containing value or error
+ * @returns Promise of a Result
  */
 export function tryCatchAsync<T>(fn: () => Promise<T>): Promise<Result<T>>
 
@@ -198,6 +244,9 @@ declare const errs: {
   assertErrorType: typeof assertErrorType
   tryCatch: typeof tryCatch
   tryCatchAsync: typeof tryCatchAsync
+  trap: typeof trap
+  trapSync: typeof trapSync
+  group: typeof group
   byName: typeof byName
   pick: typeof pick
 }

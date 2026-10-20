@@ -1,6 +1,6 @@
 // A sequential pipeline. This is where the tuple earns its keep:
 // several fallible steps in one function body, each with its own names.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- sequential steps, named bindings ---\n')
 

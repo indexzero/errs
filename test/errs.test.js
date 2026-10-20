@@ -575,4 +575,186 @@ describe('errs', () => {
       assert.deepEqual(errs.pick(null, Error), [])
     })
   })
+  describe('trap()', () => {
+    it('returns a Result for a sync, async or promise-returning function', async () => {
+      assert.equal((await errs.trap(() => 1))[0], 1)
+      assert.equal((await errs.trap(async () => 2))[0], 2)
+      assert.equal((await errs.trap(() => Promise.resolve(3)))[0], 3)
+    })
+
+    it('traps a throw without any boundary', async () => {
+      const [value, error] = await errs.trap(() => {
+        throw new Error('free-standing')
+      })
+      assert.equal(value, undefined)
+      assert.equal(error.message, 'free-standing')
+    })
+
+    it('is always async, so a forgotten await destructures loudly', () => {
+      assert.throws(
+        () => {
+          const [value] = errs.trap(() => 1)
+          return value
+        },
+        { name: 'TypeError' }
+      )
+    })
+
+    it('honours or on failure', async () => {
+      const [value, error] = await errs.trap(
+        () => {
+          throw new Error('bad')
+        },
+        { or: 'zero' }
+      )
+      assert.equal(value, 'zero')
+      assert.equal(error.message, 'bad')
+    })
+  })
+
+  describe('trapSync()', () => {
+    it('returns a Result directly', () => {
+      const [value, error] = errs.trapSync(() => 'now')
+      assert.equal(value, 'now')
+      assert.equal(error, undefined)
+    })
+
+    it('traps a throw and normalizes it', () => {
+      const [, error] = errs.trapSync(() => {
+        throw 'not an error'
+      })
+      assert(error instanceof Error)
+      assert.equal(error.message, 'not an error')
+    })
+  })
+
+  describe('deprecated aliases', () => {
+    it('tryCatch delegates to trapSync', () => {
+      const result = errs.tryCatch(() => 5)
+      assert.equal(result.ok, true)
+      assert.equal(result.value, 5)
+      assert.equal(result[0], 5)
+    })
+
+    it('tryCatchAsync delegates to trap', async () => {
+      const result = await errs.tryCatchAsync(async () => 6)
+      assert.equal(result.ok, true)
+      assert.equal(result[0], 6)
+    })
+  })
+
+  describe('group()', () => {
+    it('creates a group that collects failures', async () => {
+      const group = errs.group({ limit: 2 })
+      group.run(async () => 'a')
+      group.run(async () => {
+        throw new Error('b failed')
+      })
+
+      const [values, error] = await group.wait()
+      assert.equal(values, undefined)
+      assert.deepEqual(
+        [...error].map(e => e.message),
+        ['b failed']
+      )
+      assert.equal(group.boundary.count, 1)
+    })
+
+    it('byName and pick work on the group error', async () => {
+      class SlowError extends Error {
+        name = 'SlowError'
+      }
+
+      const group = errs.group()
+      group.run(async () => {
+        throw new SlowError('too slow')
+      })
+      group.run(async () => {
+        throw new Error('plain')
+      })
+
+      const [, error] = await group.wait()
+      const { SlowError: slow = [] } = errs.byName(error)
+      assert.equal(slow.length, 1)
+      assert.equal(errs.pick(error, SlowError).length, 1)
+    })
+  })
+
+  describe('parallel() with thunks', () => {
+    it('launches thunks and reports settled results', async () => {
+      const { results, boundary } = await errs.parallel([
+        () => Promise.resolve('a'),
+        () => Promise.reject(new Error('b failed'))
+      ])
+
+      assert.deepEqual(
+        results.map(result => result.status),
+        ['fulfilled', 'rejected']
+      )
+      assert.equal(results[0].value, 'a')
+      assert.equal(results[1].reason.message, 'b failed')
+      assert.equal(boundary.count, 1)
+    })
+
+    it('applies limit, which promises could never support', async () => {
+      let active = 0
+      let peak = 0
+      const task = async () => {
+        active += 1
+        peak = Math.max(peak, active)
+        await new Promise(resolve => setTimeout(resolve, 10))
+        active -= 1
+      }
+
+      await errs.parallel([task, task, task, task], { limit: 2 })
+      assert.equal(peak, 2)
+    })
+
+    it('applies a cancellation signal', async () => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new Error('stop')), 5)
+
+      const { boundary } = await errs.parallel(
+        [
+          signal =>
+            new Promise((resolve, reject) => {
+              const timer = setTimeout(resolve, 1000)
+              signal.addEventListener('abort', () => {
+                clearTimeout(timer)
+                reject(signal.reason)
+              })
+            })
+        ],
+        { signal: controller.signal }
+      )
+
+      assert.equal(boundary.count, 1)
+      assert.equal(boundary.errors[0].message, 'stop')
+    })
+
+    it('still accepts started promises for v1 compatibility', async () => {
+      const { results, boundary } = await errs.parallel([
+        Promise.resolve(1),
+        Promise.reject(new Error('old style'))
+      ])
+
+      assert.deepEqual(
+        results.map(result => result.status),
+        ['fulfilled', 'rejected']
+      )
+      assert.equal(boundary.count, 1)
+    })
+
+    it('treats an empty list as thunks, with no warning and no results', async () => {
+      const { results, boundary } = await errs.parallel([])
+      assert.deepEqual(results, [])
+      assert.equal(boundary.count, 0)
+    })
+
+    it('refuses a mix of thunks and promises', async () => {
+      await assert.rejects(() => errs.parallel([() => 1, Promise.resolve(2)]), {
+        name: 'TypeError'
+      })
+    })
+  })
 })

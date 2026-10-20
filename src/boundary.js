@@ -6,6 +6,13 @@
  *
  */
 
+import { fail, normalize, ok } from './result.js'
+
+/**
+ * @template T
+ * @typedef {[T|undefined, Error|undefined] & ({ ok: true, value: T, error: undefined } | { ok: false, value: T|undefined, error: Error })} Result
+ */
+
 /**
  * Makes an AggregateError iterable over its own `errors` array.
  *
@@ -130,35 +137,58 @@ export class ErrorBoundary {
   }
 
   /**
-   * Executes fn, traps error to boundary if thrown, returns Result
-   * Named after bash's `trap` command (set -euo pipefail)
+   * Executes fn, traps any error to the boundary, and returns a Result.
+   * Named after bash's `trap` (set -euo pipefail).
+   *
+   * Always returns a Promise, whether fn is sync, async, or a plain
+   * function returning a promise. A function that is sometimes sync and
+   * sometimes async is the oldest hazard in Node's history, so the sync
+   * door is a separate method rather than a second return shape.
    * @template T
-   * @param {() => T} fn - Function to execute
-   * @returns {{ ok: true, value: T } | { ok: false, error: Error }} Result
+   * @param {() => T|Promise<T>} fn - Function to execute
+   * @param {object} [options] - Options
+   * @param {T} [options.or] - Value for the first slot on failure, Go's zero value
+   * @returns {Promise<Result<T>>} Promise of a Result
    */
-  trap(fn) {
+  async trap(fn, options = {}) {
     try {
-      return { ok: true, value: fn() }
+      return ok(await fn())
     } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error))
+      const normalized = normalize(error)
       this.add(normalized)
-      return { ok: false, error: normalized }
+      return fail(normalized, options.or)
     }
   }
 
   /**
-   * Async version of trap - executes fn, traps error to boundary if thrown
+   * Synchronous trap. Executes fn, traps any error to the boundary, and
+   * returns a Result directly rather than a promise.
+   * @template T
+   * @param {() => T} fn - Function to execute
+   * @param {object} [options] - Options
+   * @param {T} [options.or] - Value for the first slot on failure, Go's zero value
+   * @returns {Result<T>} The Result
+   */
+  trapSync(fn, options = {}) {
+    try {
+      return ok(fn())
+    } catch (error) {
+      const normalized = normalize(error)
+      this.add(normalized)
+      return fail(normalized, options.or)
+    }
+  }
+
+  /**
+   * Alias of trap(), kept for v1 compatibility
+   * @deprecated Use trap(), which is async for every kind of function
    * @template T
    * @param {() => Promise<T>} fn - Async function to execute
-   * @returns {Promise<{ ok: true, value: T } | { ok: false, error: Error }>} Promise of Result
+   * @param {object} [options] - Options
+   * @param {T} [options.or] - Value for the first slot on failure
+   * @returns {Promise<Result<T>>} Promise of a Result
    */
-  async trapAsync(fn) {
-    try {
-      return { ok: true, value: await fn() }
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error))
-      this.add(normalized)
-      return { ok: false, error: normalized }
-    }
+  trapAsync(fn, options) {
+    return this.trap(fn, options)
   }
 }

@@ -1,5 +1,5 @@
 // Argument order. Read this one before you write any others.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- value first, error last ---\n')
 

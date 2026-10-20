@@ -1,5 +1,5 @@
 // group({ cancelOnError: true }): first failure aborts the siblings.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- cancelOnError: stop paying for doomed work ---\n')
 
@@ -36,6 +36,7 @@ console.log('\nsignal aborted:', g.signal.aborted)
 console.log('errors collected:', [...err].length)
 console.log('reasons:', [...err].map(e => e.message).join(' | '))
 
-// pick() is the constructor-based counterpart to byName(), and avoids
-// keying on stringly-typed names. It is the analogue of Go's errors.As.
-console.log('aborts:', errs.pick(err, DOMException).length)
+// cancelOnError aborts with an AbortError whose cause is the original
+// failure, so the siblings say why they stopped rather than repeating it.
+const { AbortError: aborts = [] } = errs.byName(err)
+console.log('aborts:', aborts.length, '| caused by:', aborts[0]?.cause.message)

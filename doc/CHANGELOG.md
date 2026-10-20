@@ -5,6 +5,47 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Go-shaped Results** - `trap()`, `trapSync()` and `group().wait()` return an
+  array of `[value, error]` that also carries `ok`, `value` and `error` as
+  non-enumerable properties, so the tuple, named-property and tagged readings
+  all work on one object. Order is value first, error last.
+  - `or` option supplies a failure value, the analogue of Go's zero value
+- **ErrorGroup** (`errs.group()`, `errs/group`) - bounded, cancellable
+  concurrency over thunks, collecting every failure into a boundary
+  - `limit` caps tasks in flight; a freed slot is handed straight to the next
+    waiter so a later task cannot slip past the limit
+  - `signal` accepts an external AbortSignal, adopting its reason, so an
+    `AbortSignal.timeout()` works as a deadline
+  - `cancelOnError` aborts the siblings on first failure, with an `AbortError`
+    whose `cause` is the original failure
+  - `results` exposes per-task Results in run order for partial recovery
+- **Iterable AggregateError** - `toAggregateError()` returns an aggregate that
+  is iterable over its own errors, so `for..of`, spread and array destructuring
+  work without an `.errors` hop
+- **byName() and pick()** - group errors by `name` for destructuring by type,
+  or select them by constructor
+- `errs/result` subpath export for `Result`, `ok()`, `fail()` and `normalize()`
+
+### Changed
+
+- **BREAKING: `boundary.trap()` is now async.** It accepts sync functions,
+  async functions and plain promise-returning functions, and always returns a
+  Promise. The synchronous door is `boundary.trapSync()`. A missed migration
+  fails loudly, since array-destructuring a Promise throws a TypeError.
+- `errs.parallel()` prefers thunks, which it launches itself so that `limit`
+  and `signal` apply. Started promises still work and keep the v1 return shape
+  but warn once, because neither option can apply to work already in flight.
+
+### Deprecated
+
+- `boundary.trapAsync(fn)` - alias of `trap()`
+- `errs.tryCatch(fn)` - alias of `trapSync()`
+- `errs.tryCatchAsync(fn)` - alias of `trap()`
+
 ## [1.0.0] - 2025-02-05
 
 ### Added

@@ -95,7 +95,7 @@ if (boundary.hasErrors()) {
 }
 ```
 
-### trap() and trapAsync() for Safe Execution
+### trap() and trapSync() for Safe Execution
 
 Execute code and collect errors automatically:
 
@@ -103,30 +103,43 @@ Execute code and collect errors automatically:
 const boundary = errs.boundary();
 
 // Sync
-const result1 = boundary.trap(() => JSON.parse(userInput));
+const [config, configErr] = boundary.trapSync(() => JSON.parse(userInput));
 
-// Async
-const result2 = await boundary.trapAsync(() => fetchUser(id));
+// Anything else: async fns and plain promise-returning fns alike
+const [user, userErr] = await boundary.trap(() => fetchUser(id));
 
-// Results are { ok: true, value } or { ok: false, error }
-if (result1.ok) {
-  console.log(result1.value);
+// A Result is [value, error] and also { ok, value, error }
+if (configErr) {
+  console.error('Parse failed:', configErr.message);
 }
 ```
 
-### Result Pattern with tryCatch
+Note that `trap()` is async in every case; `trapSync()` is the synchronous
+door. In v1.0.0, `trap()` was the synchronous one. See MIGRATION.md.
 
-Go-style error handling without boundaries:
+### Results without a boundary
+
+Go-style error handling with nothing to accumulate into:
 
 ```javascript
-import { tryCatch, tryCatchAsync } from 'errs';
+import { trap, trapSync } from 'errs';
 
-const result = tryCatch(() => JSON.parse(input));
-if (!result.ok) {
-  console.error('Parse failed:', result.error.message);
+const [parsed, err] = trapSync(() => JSON.parse(input));
+if (err) {
+  console.error('Parse failed:', err.message);
   return;
 }
-console.log(result.value);
+console.log(parsed);
+```
+
+### group() for bounded, cancellable concurrency
+
+```javascript
+const g = errs.group({ limit: 4, cancelOnError: true });
+for (const id of ids) g.run(signal => fetchUser(id, { signal }));
+
+const [users, err] = await g.wait();
+if (err) throw err;  // AggregateError carrying every failure
 ```
 
 ### Error Formatting

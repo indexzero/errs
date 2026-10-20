@@ -302,10 +302,10 @@ describe('ErrorBoundary', () => {
     })
   })
 
-  describe('trap()', () => {
+  describe('trapSync()', () => {
     it('returns ok result for successful function', () => {
       const boundary = new ErrorBoundary()
-      const result = boundary.trap(() => 42)
+      const result = boundary.trapSync(() => 42)
       assert.equal(result.ok, true)
       assert.equal(result.value, 42)
       assert.equal(boundary.count, 0)
@@ -313,7 +313,7 @@ describe('ErrorBoundary', () => {
 
     it('returns error result and adds to boundary on throw', () => {
       const boundary = new ErrorBoundary()
-      const result = boundary.trap(() => {
+      const result = boundary.trapSync(() => {
         throw new Error('trap error')
       })
       assert.equal(result.ok, false)
@@ -325,7 +325,7 @@ describe('ErrorBoundary', () => {
 
     it('converts non-Error throws to Error', () => {
       const boundary = new ErrorBoundary()
-      const result = boundary.trap(() => {
+      const result = boundary.trapSync(() => {
         throw 'string error'
       })
       assert.equal(result.ok, false)
@@ -337,17 +337,109 @@ describe('ErrorBoundary', () => {
     it('collects multiple errors from repeated traps', () => {
       const boundary = new ErrorBoundary()
 
-      boundary.trap(() => {
+      boundary.trapSync(() => {
         throw new Error('error 1')
       })
-      boundary.trap(() => 'success')
-      boundary.trap(() => {
+      boundary.trapSync(() => 'success')
+      boundary.trapSync(() => {
         throw new Error('error 2')
       })
 
       assert.equal(boundary.count, 2)
       assert.equal(boundary.errors[0].message, 'error 1')
       assert.equal(boundary.errors[1].message, 'error 2')
+    })
+  })
+
+  describe('trap() is async for every kind of function', () => {
+    it('awaits an async function', async () => {
+      const boundary = new ErrorBoundary()
+      const [value, error] = await boundary.trap(async () => 42)
+      assert.equal(value, 42)
+      assert.equal(error, undefined)
+      assert.equal(boundary.count, 0)
+    })
+
+    it('awaits a plain function returning a promise', async () => {
+      const boundary = new ErrorBoundary()
+      const [value] = await boundary.trap(() => Promise.resolve('plain'))
+      assert.equal(value, 'plain')
+    })
+
+    it('accepts a synchronous function too', async () => {
+      const boundary = new ErrorBoundary()
+      const [value] = await boundary.trap(() => 'sync')
+      assert.equal(value, 'sync')
+    })
+
+    it('returns a promise even for a sync function, so there is no sync-or-async return', () => {
+      const boundary = new ErrorBoundary()
+      const returned = boundary.trap(() => 1)
+      assert(returned instanceof Promise)
+    })
+
+    it('traps a rejection to the boundary', async () => {
+      const boundary = new ErrorBoundary()
+      const [value, error] = await boundary.trap(() => Promise.reject(new Error('nope')))
+      assert.equal(value, undefined)
+      assert.equal(error.message, 'nope')
+      assert.equal(boundary.count, 1)
+    })
+
+    it('array destructuring a forgotten await throws instead of going quiet', () => {
+      const boundary = new ErrorBoundary()
+      assert.throws(
+        () => {
+          const [value] = boundary.trap(() => 1)
+          return value
+        },
+        { name: 'TypeError' }
+      )
+    })
+  })
+
+  describe('Result shape', () => {
+    it('reads as a tuple, as named properties, and as a tagged union', async () => {
+      const boundary = new ErrorBoundary()
+      const result = await boundary.trap(async () => 'x')
+
+      const [tupleValue, tupleError] = result
+      assert.equal(tupleValue, 'x')
+      assert.equal(tupleError, undefined)
+
+      const { value, error, ok } = result
+      assert.equal(value, 'x')
+      assert.equal(error, undefined)
+      assert.equal(ok, true)
+    })
+
+    it('keeps the named properties non-enumerable so it serializes as a pair', async () => {
+      const boundary = new ErrorBoundary()
+      const result = await boundary.trap(async () => 1)
+      assert.deepEqual(Object.keys(result), ['0', '1'])
+      assert.equal(JSON.stringify(result), '[1,null]')
+      assert.equal(result.length, 2)
+    })
+
+    it('or supplies the failure value without changing ok', () => {
+      const boundary = new ErrorBoundary()
+      const [value, error] = boundary.trapSync(
+        () => {
+          throw new Error('bad')
+        },
+        { or: 'fallback' }
+      )
+      assert.equal(value, 'fallback')
+      assert.equal(error.message, 'bad')
+      assert.equal(boundary.trapSync(() => 1).ok, true)
+    })
+
+    it('leaves the value slot undefined on failure without or', () => {
+      const boundary = new ErrorBoundary()
+      const [value] = boundary.trapSync(() => {
+        throw new Error('bad')
+      })
+      assert.equal(value, undefined)
     })
   })
 

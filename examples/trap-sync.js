@@ -1,5 +1,5 @@
 // trapSync(): the explicitly synchronous door, plus Go's zero value.
-import errs from '../../src/errs.js'
+import errs from '../src/errs.js'
 
 console.log('--- trapSync(): no promise, no await ---\n')
 
