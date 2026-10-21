@@ -8,6 +8,75 @@ This guide covers migrating from errs v0.3.x to v1.0.
 2. **ESM Only** - CommonJS is no longer supported
 3. **Error.prototype.toJSON Removed** - Use `errs.toJSON()` function instead
 4. **Deprecated Properties** - `error.description` and `error.stacktrace` removed
+5. **`boundary.trap()` is now async** - the synchronous door is `trapSync()`
+
+### boundary.trap() is now async
+
+`trap()` accepts sync functions, async functions and plain promise-returning
+functions, and always returns a Promise. A function that is sometimes
+synchronous and sometimes asynchronous is the oldest hazard in Node's history,
+so the sync path became a separate method instead of a second return shape.
+
+**Before:**
+
+```js
+const result = boundary.trap(() => JSON.parse(input))
+if (result.ok) use(result.value)
+```
+
+**After:**
+
+```js
+const result = boundary.trapSync(() => JSON.parse(input))
+if (result.ok) use(result.value)
+```
+
+A missed migration fails loudly **if you destructure the tuple**:
+array-destructuring the returned Promise throws a TypeError, because promises
+are not iterable. If you keep the v1 `result.ok` reading, it stays quiet, since
+`.ok` on a promise is `undefined` and reads as a failure that never happened.
+Grep for `.trap(` before relying on the loud path.
+
+### Results are now arrays as well as objects
+
+`trap()`, `trapSync()` and `group().wait()` return an array of
+`[value, error]` that **also** carries `ok`, `value` and `error` as
+properties. Existing `result.ok` and `result.value` call sites keep working
+unchanged; the tuple reading is additive.
+
+Order is value first, error last, following Go rather than Node's error-first
+callback convention. A swapped destructure does not throw, it silently inverts
+your control flow, so see `examples/error-order.js`.
+
+### Renamed, with aliases
+
+| Before | Now | Removed in |
+| --- | --- | --- |
+| `boundary.trap(fn)` (sync) | `boundary.trapSync(fn)` | already breaking |
+| `boundary.trapAsync(fn)` | `boundary.trap(fn)` | next major |
+| `errs.tryCatch(fn)` | `errs.trapSync(fn)` | next major |
+| `errs.tryCatchAsync(fn)` | `errs.trap(fn)` | next major |
+
+### errs.parallel() prefers thunks
+
+Passing started promises still works and still returns `{ results, boundary }`,
+but warns once, because `limit` and `signal` cannot apply to work that is
+already in flight.
+
+**Before:**
+
+```js
+const { results, boundary } = await errs.parallel([fetchUser(1), fetchUser(2)])
+```
+
+**After:**
+
+```js
+const { results, boundary } = await errs.parallel(
+  [1, 2].map(id => signal => fetchUser(id, { signal })),
+  { limit: 2 }
+)
+```
 
 ## Step-by-Step Migration
 

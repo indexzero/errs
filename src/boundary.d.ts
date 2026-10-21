@@ -14,10 +14,19 @@ export interface ErrorBoundaryOptions {
   captureStack?: boolean
 }
 
+// Types only: boundary.js re-exports nothing from result.js at runtime.
+export type { Result, TrapOptions } from './result.js'
+import { Result, TrapOptions } from './result.js'
+
 /**
- * Result type for trap operations
+ * Makes an AggregateError iterable over its own `errors` array.
+ *
+ * Defined on the instance rather than via a subclass, so the error's
+ * constructor, name and formatting stay exactly those of AggregateError.
+ * @param aggregate - The aggregate error to make iterable
+ * @returns The same aggregate, now iterable
  */
-export type Result<T> = { ok: true; value: T } | { ok: false; error: Error }
+export function makeIterable<T extends AggregateError>(aggregate: T): T & Iterable<Error>
 
 /**
  * ErrorBoundary - Collects errors without immediate throwing
@@ -57,7 +66,7 @@ export class ErrorBoundary {
    * @param message - Message for the aggregate error
    * @returns AggregateError or null if no errors
    */
-  toAggregateError(message?: string): AggregateError | null
+  toAggregateError(message?: string): (AggregateError & Iterable<Error>) | null
 
   /**
    * Throws an AggregateError if any errors have been collected
@@ -73,17 +82,31 @@ export class ErrorBoundary {
   clear(): this
 
   /**
-   * Executes fn, traps error to boundary if thrown, returns Result
-   * Named after bash's `trap` command (set -euo pipefail)
+   * Executes fn, traps any error to the boundary, and returns a Result.
+   *
+   * Always returns a Promise, whether fn is sync, async, or a plain
+   * function returning a promise. The sync door is trapSync(), a separate
+   * method rather than a second return shape.
    * @param fn - Function to execute
-   * @returns Result containing value or error
+   * @param options - Options, including `or` for the failure value
+   * @returns Promise of a Result
    */
-  trap<T>(fn: () => T): Result<T>
+  trap<T>(fn: () => T | Promise<T>, options?: TrapOptions<T>): Promise<Result<T>>
 
   /**
-   * Async version of trap - executes fn, traps error to boundary if thrown
-   * @param fn - Async function to execute
-   * @returns Promise of Result containing value or error
+   * Synchronous trap. Returns a Result directly rather than a promise.
+   * @param fn - Function to execute
+   * @param options - Options, including `or` for the failure value
+   * @returns The Result
    */
-  trapAsync<T>(fn: () => Promise<T>): Promise<Result<T>>
+  trapSync<T>(fn: () => T, options?: TrapOptions<T>): Result<T>
+
+  /**
+   * Alias of trap(), kept for v1 compatibility
+   * @deprecated Use trap(), which is async for every kind of function
+   * @param fn - Async function to execute
+   * @param options - Options, including `or` for the failure value
+   * @returns Promise of a Result
+   */
+  trapAsync<T>(fn: () => Promise<T>, options?: TrapOptions<T>): Promise<Result<T>>
 }

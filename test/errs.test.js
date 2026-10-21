@@ -278,6 +278,42 @@ describe('errs', () => {
       assert.equal(typeof json.message, 'string')
       assert.equal(typeof json.stack, 'string')
       assert.equal(json.customProp, 'custom value')
+      assert.equal(json.name, 'Error')
+    })
+
+    it("includes an AggregateError's collected errors", () => {
+      const boundary = errs.boundary({ captureStack: false })
+      boundary.add(new Error('a'))
+      boundary.add(new TypeError('b'))
+
+      const json = errs.toJSON(boundary.toAggregateError('two failed'))
+
+      assert.equal(json.errors.length, 2)
+      assert.equal(json.errors[0].name, 'Error')
+      assert.equal(json.errors[0].message, 'a')
+      assert.equal(json.errors[1].name, 'TypeError')
+    })
+
+    it('includes a non-enumerable cause', () => {
+      const error = new Error('outer', { cause: new Error('inner') })
+      const json = errs.toJSON(error)
+
+      assert.equal(json.cause.message, 'inner')
+    })
+
+    it('survives a circular cause', () => {
+      const error = new Error('loop')
+      error.cause = error
+
+      const json = errs.toJSON(error)
+      assert.equal(json.cause, '[Circular]')
+      assert.doesNotThrow(() => JSON.stringify(json))
+    })
+
+    it('omits cause and errors when absent', () => {
+      const json = errs.toJSON(new Error('plain'))
+      assert.equal('cause' in json, false)
+      assert.equal('errors' in json, false)
     })
   })
 
@@ -480,6 +516,401 @@ describe('errs', () => {
       const bad = await errs.tryCatchAsync(() => Promise.reject(new Error('rejected')))
       assert.equal(bad.ok, false)
       assert.equal(bad.error.message, 'rejected')
+    })
+  })
+  describe('byName()', () => {
+    class TimeoutError extends Error {
+      name = 'TimeoutError'
+    }
+
+    const mixed = () => {
+      const b = errs.boundary()
+      b.add(new TimeoutError('slow one'))
+      b.add(new Error('plain'))
+      b.add(new TimeoutError('slow two'))
+      return b.toAggregateError()
+    }
+
+    it('groups an AggregateError by error name', () => {
+      const { TimeoutError: timeouts = [], Error: plain = [] } = errs.byName(mixed())
+      assert.equal(timeouts.length, 2)
+      assert.equal(plain.length, 1)
+      assert.deepEqual(
+        timeouts.map(e => e.message),
+        ['slow one', 'slow two']
+      )
+    })
+
+    it('destructures missing names to the supplied default', () => {
+      const { NotFoundError = [] } = errs.byName(mixed())
+      assert.deepEqual(NotFoundError, [])
+    })
+
+    it('accepts a plain array of errors', () => {
+      const grouped = errs.byName([new TimeoutError('a'), new Error('b')])
+      assert.equal(grouped.TimeoutError.length, 1)
+      assert.equal(grouped.Error.length, 1)
+    })
+
+    it('accepts a single error', () => {
+      assert.equal(errs.byName(new TimeoutError('solo')).TimeoutError.length, 1)
+    })
+
+    it('does not depend on the aggregate being iterable', () => {
+      const bare = new AggregateError([new TimeoutError('a')], 'bare')
+      assert.equal(typeof bare[Symbol.iterator], 'undefined')
+      assert.equal(errs.byName(bare).TimeoutError.length, 1)
+    })
+
+    it('returns an empty record for empty and non-error input', () => {
+      for (const input of [null, undefined, [], 'not an error', 42]) {
+        assert.deepEqual(Object.keys(errs.byName(input)), [])
+      }
+    })
+
+    it('uses a null-prototype record so prototype names cannot collide', () => {
+      const grouped = errs.byName([
+        Object.assign(new Error('a'), { name: 'constructor' }),
+        Object.assign(new Error('b'), { name: 'hasOwnProperty' }),
+        Object.assign(new Error('c'), { name: 'toString' })
+      ])
+
+      assert.equal(Object.getPrototypeOf(grouped), null)
+      assert.equal(grouped.constructor.length, 1)
+      assert.equal(grouped.hasOwnProperty.length, 1)
+      assert.equal(grouped.toString.length, 1)
+
+      // Destructuring defaults still work for an absent name
+      const { NotPresent = [] } = errs.byName([new Error('x')])
+      assert.deepEqual(NotPresent, [])
+    })
+
+    it('falls back to Error for a nameless error', () => {
+      const nameless = new Error('x')
+      nameless.name = ''
+      assert.equal(errs.byName([nameless]).Error.length, 1)
+    })
+  })
+
+  describe('pick()', () => {
+    class TimeoutError extends Error {
+      name = 'TimeoutError'
+    }
+    class NotFoundError extends Error {
+      name = 'NotFoundError'
+    }
+
+    const mixed = () => {
+      const b = errs.boundary()
+      b.add(new TimeoutError('slow'))
+      b.add(new NotFoundError('gone'))
+      b.add(new Error('plain'))
+      return b.toAggregateError()
+    }
+
+    it('selects by constructor', () => {
+      assert.equal(errs.pick(mixed(), TimeoutError).length, 1)
+      assert.equal(errs.pick(mixed(), NotFoundError).length, 1)
+    })
+
+    it('matches subclasses, since it uses instanceof', () => {
+      assert.equal(errs.pick(mixed(), Error).length, 3)
+    })
+
+    it('returns an empty array when nothing matches', () => {
+      class Unused extends Error {}
+      assert.deepEqual(errs.pick(mixed(), Unused), [])
+    })
+
+    it('returns an empty array for empty input', () => {
+      assert.deepEqual(errs.pick(null, Error), [])
+    })
+  })
+  describe('trap()', () => {
+    it('returns a Result for a sync, async or promise-returning function', async () => {
+      assert.equal((await errs.trap(() => 1))[0], 1)
+      assert.equal((await errs.trap(async () => 2))[0], 2)
+      assert.equal((await errs.trap(() => Promise.resolve(3)))[0], 3)
+    })
+
+    it('traps a throw without any boundary', async () => {
+      const [value, error] = await errs.trap(() => {
+        throw new Error('free-standing')
+      })
+      assert.equal(value, undefined)
+      assert.equal(error.message, 'free-standing')
+    })
+
+    it('is always async, so a forgotten await destructures loudly', () => {
+      assert.throws(
+        () => {
+          // biome-ignore lint/plugin: destructuring the array is the behaviour under test
+          const [value] = errs.trap(() => 1)
+          return value
+        },
+        { name: 'TypeError' }
+      )
+    })
+
+    it('honours or on failure', async () => {
+      const [value, error] = await errs.trap(
+        () => {
+          throw new Error('bad')
+        },
+        { or: 'zero' }
+      )
+      assert.equal(value, 'zero')
+      assert.equal(error.message, 'bad')
+    })
+  })
+
+  describe('trapSync()', () => {
+    it('returns a Result directly', () => {
+      const [value, error] = errs.trapSync(() => 'now')
+      assert.equal(value, 'now')
+      assert.equal(error, undefined)
+    })
+
+    it('traps a throw and normalizes it', () => {
+      const [, error] = errs.trapSync(() => {
+        throw 'not an error'
+      })
+      assert(error instanceof Error)
+      assert.equal(error.message, 'not an error')
+    })
+  })
+
+  describe('deprecated aliases', () => {
+    it('tryCatch delegates to trapSync', () => {
+      const result = errs.tryCatch(() => 5)
+      assert.equal(result.ok, true)
+      assert.equal(result.value, 5)
+      assert.equal(result[0], 5)
+    })
+
+    it('tryCatchAsync delegates to trap', async () => {
+      const result = await errs.tryCatchAsync(async () => 6)
+      assert.equal(result.ok, true)
+      assert.equal(result[0], 6)
+    })
+  })
+
+  describe('group()', () => {
+    it('creates a group that collects failures', async () => {
+      const group = errs.group({ limit: 2 })
+      group.run(async () => 'a')
+      group.run(async () => {
+        throw new Error('b failed')
+      })
+
+      const [values, error] = await group.wait()
+      assert.equal(values, undefined)
+      assert.deepEqual(
+        [...error].map(e => e.message),
+        ['b failed']
+      )
+      assert.equal(group.boundary.count, 1)
+    })
+
+    it('byName and pick work on the group error', async () => {
+      class SlowError extends Error {
+        name = 'SlowError'
+      }
+
+      const group = errs.group()
+      group.run(async () => {
+        throw new SlowError('too slow')
+      })
+      group.run(async () => {
+        throw new Error('plain')
+      })
+
+      const [, error] = await group.wait()
+      const { SlowError: slow = [] } = errs.byName(error)
+      assert.equal(slow.length, 1)
+      assert.equal(errs.pick(error, SlowError).length, 1)
+    })
+  })
+
+  describe('parallel() with thunks', () => {
+    it('launches thunks and reports settled results', async () => {
+      const { results, boundary } = await errs.parallel([
+        () => Promise.resolve('a'),
+        () => Promise.reject(new Error('b failed'))
+      ])
+
+      assert.deepEqual(
+        results.map(result => result.status),
+        ['fulfilled', 'rejected']
+      )
+      assert.equal(results[0].value, 'a')
+      assert.equal(results[1].reason.message, 'b failed')
+      assert.equal(boundary.count, 1)
+    })
+
+    it('applies limit, which promises could never support', async () => {
+      let active = 0
+      let peak = 0
+      const task = async () => {
+        active += 1
+        peak = Math.max(peak, active)
+        await new Promise(resolve => setTimeout(resolve, 10))
+        active -= 1
+      }
+
+      await errs.parallel([task, task, task, task], { limit: 2 })
+      assert.equal(peak, 2)
+    })
+
+    it('applies a cancellation signal', async () => {
+      const controller = new AbortController()
+      setTimeout(() => controller.abort(new Error('stop')), 5)
+
+      const { boundary } = await errs.parallel(
+        [
+          signal =>
+            new Promise((resolve, reject) => {
+              const timer = setTimeout(resolve, 1000)
+              signal.addEventListener('abort', () => {
+                clearTimeout(timer)
+                reject(signal.reason)
+              })
+            })
+        ],
+        { signal: controller.signal }
+      )
+
+      assert.equal(boundary.count, 1)
+      assert.equal(boundary.errors[0].message, 'stop')
+    })
+
+    it('still accepts started promises for v1 compatibility', async () => {
+      const { results, boundary } = await errs.parallel([
+        Promise.resolve(1),
+        Promise.reject(new Error('old style'))
+      ])
+
+      assert.deepEqual(
+        results.map(result => result.status),
+        ['fulfilled', 'rejected']
+      )
+      assert.equal(boundary.count, 1)
+    })
+
+    it('treats an empty list as thunks, with no warning and no results', async () => {
+      const { results, boundary } = await errs.parallel([])
+      assert.deepEqual(results, [])
+      assert.equal(boundary.count, 0)
+    })
+
+    it('refuses a mix of thunks and promises', async () => {
+      await assert.rejects(() => errs.parallel([() => 1, Promise.resolve(2)]), {
+        name: 'TypeError'
+      })
+    })
+  })
+  describe('declared arity matches runtime arity', () => {
+    // The type-level half of this lives in test/types/conformance.ts. Neither
+    // conformance direction catches a declaration that adds an optional
+    // parameter the implementation does not take, because a function of fewer
+    // parameters is assignable to one expected to take more. `toJSON` drifted
+    // that way once, and every gate stayed green.
+    it('pins the parameter count of each exported function', () => {
+      assert.equal(errs.toJSON.length, 1)
+      assert.equal(errs.byName.length, 1)
+      assert.equal(errs.pick.length, 2)
+      assert.equal(errs.trap.length, 1)
+      assert.equal(errs.trapSync.length, 1)
+      assert.equal(errs.group.length, 1)
+      assert.equal(errs.boundary.length, 1)
+    })
+  })
+
+  describe('review regressions', () => {
+    it('toJSON works as a bare callback', () => {
+      // A `seen` parameter in the public signature made Array#map pass the
+      // index as the cycle guard.
+      const json = [new Error('one'), new Error('two')].map(errs.toJSON)
+      assert.equal(json.length, 2)
+      assert.equal(json[0].message, 'one')
+      assert.equal(Array.from([new Error('x')], errs.toJSON)[0].message, 'x')
+    })
+
+    it('toJSON treats a shared reference as shared, not circular', () => {
+      const root = new Error('root')
+      const shared = new Error('abort', { cause: root })
+      const aggregate = new AggregateError([root, shared, shared], 'three')
+
+      const json = errs.toJSON(aggregate)
+
+      assert.equal(json.errors.length, 3)
+      assert.equal(json.errors[1].name, 'Error')
+      assert.equal(json.errors[2].message, 'abort')
+      assert.equal(json.errors[1].cause.message, 'root')
+    })
+
+    it('toJSON output is always JSON-serializable', () => {
+      const aggregate = new AggregateError([], 'cyclic')
+      aggregate.errors.push(aggregate.errors)
+      assert.doesNotThrow(() => JSON.stringify(errs.toJSON(aggregate)))
+
+      const withMeta = new Error('meta')
+      withMeta.meta = {}
+      withMeta.meta.self = withMeta.meta
+      assert.doesNotThrow(() => JSON.stringify(errs.toJSON(withMeta)))
+    })
+
+    it('normalize does not throw on a value whose String() throws', async () => {
+      const hostile = {
+        toString() {
+          throw new Error('hostile toString')
+        }
+      }
+
+      const [, error] = await errs.trap(() => {
+        throw hostile
+      })
+      assert(error instanceof Error)
+
+      const nullProto = Object.create(null)
+      const [, error2] = errs.trapSync(() => {
+        throw nullProto
+      })
+      assert(error2 instanceof Error)
+    })
+
+    it('trapSync refuses an async function instead of leaking the rejection', () => {
+      const [value, error] = errs.trapSync(async () => {
+        throw new Error('would escape')
+      })
+
+      assert.equal(value, undefined)
+      assert(error instanceof TypeError)
+      assert.match(error.message, /Use trap\(\)/)
+    })
+
+    it('toJSON caps recursion depth like the JSON formatter', () => {
+      let deep = new Error('leaf')
+      for (let i = 0; i < 40; i += 1) deep = new Error(`wrap ${i}`, { cause: deep })
+
+      let node = errs.toJSON(deep)
+      let depth = 0
+      while (node?.cause) {
+        node = node.cause
+        depth += 1
+      }
+
+      assert.equal(depth, 11)
+      assert.deepEqual(node, { truncated: true })
+    })
+
+    it('parallel does not orphan started promises when refusing mixed input', async () => {
+      const rejected = Promise.reject(new Error('orphaned'))
+      await assert.rejects(() => errs.parallel([() => 1, rejected]), { name: 'TypeError' })
+
+      // If the rejection were unobserved this would be an unhandledRejection
+      await new Promise(resolve => setTimeout(resolve, 10))
+      await assert.rejects(() => rejected, { message: 'orphaned' })
     })
   })
 })

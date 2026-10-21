@@ -33,14 +33,20 @@ if (boundary.hasErrors()) {
 console.log('\n--- Parallel Operations Example ---\n')
 
 async function main() {
+  // Thunks, not started promises. The group launches them itself, which is
+  // what lets `limit` apply at all.
   const operations = [
-    Promise.resolve({ id: 1, name: 'Alice' }),
-    Promise.reject(new Error('User 2 not found')),
-    Promise.resolve({ id: 3, name: 'Charlie' }),
-    Promise.reject(new Error('Database timeout'))
+    async () => ({ id: 1, name: 'Alice' }),
+    async () => {
+      throw new Error('User 2 not found')
+    },
+    async () => ({ id: 3, name: 'Charlie' }),
+    async () => {
+      throw new Error('Database timeout')
+    }
   ]
 
-  const { results, boundary: opBoundary } = await errs.parallel(operations)
+  const { results, boundary: opBoundary } = await errs.parallel(operations, { limit: 2 })
 
   const successfulUsers = results.filter(r => r.status === 'fulfilled').map(r => r.value)
 

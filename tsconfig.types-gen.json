@@ -1,0 +1,19 @@
+{
+  "//": "Derives declarations from the JSDoc in src/*.js into .types-gen/, so tsconfig.types.json can assert the hand-written src/*.d.ts agree with them. Not shipped; .types-gen/ is gitignored.",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "exactOptionalPropertyTypes": true,
+    "lib": ["es2024"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "strict": true,
+    "target": "es2024",
+    "skipLibCheck": true,
+    "outDir": ".types-gen"
+  },
+  "include": ["src/**/*.js"],
+  "exclude": ["src/**/*.d.ts", "node_modules", "dist"]
+}

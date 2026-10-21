@@ -6,10 +6,47 @@
  *
  */
 
+import { fail, normalize, ok } from './result.js'
+
+/**
+ * @template T
+ * @typedef {([T, undefined] & { ok: true, value: T, error: undefined }) | ([T|undefined, Error] & { ok: false, value: T|undefined, error: Error })} Result
+ */
+
+/**
+ * Makes an AggregateError iterable over its own `errors` array.
+ *
+ * Defined on the instance rather than via a subclass so that the error's
+ * constructor, name and formatting stay exactly those of AggregateError.
+ * The property is non-enumerable, so serialization is unchanged.
+ * @template {AggregateError} T
+ * @param {T} aggregate - The aggregate error to make iterable
+ * @returns {T & Iterable<Error>} The same aggregate, now iterable
+ */
+export function makeIterable(aggregate) {
+  const iterable = /** @type {T & Iterable<Error>} */ (aggregate)
+  if (aggregate == null) return iterable
+  const existing = /** @type {{ [Symbol.iterator]?: unknown }} */ (
+    /** @type {unknown} */ (aggregate)
+  )[Symbol.iterator]
+  if (typeof existing === 'function') return iterable
+  if (!Object.isExtensible(aggregate)) return iterable
+  Object.defineProperty(aggregate, Symbol.iterator, {
+    value: function* () {
+      yield* this.errors ?? []
+    },
+    writable: true,
+    configurable: true,
+    enumerable: false
+  })
+  return iterable
+}
+
 /**
  * ErrorBoundary - Collects errors without immediate throwing
  */
 export class ErrorBoundary {
+  /** @type {Error[]} */
   #errors = []
   #options
   #createdAt
@@ -71,12 +108,16 @@ export class ErrorBoundary {
 
   /**
    * Converts collected errors to an AggregateError
+   *
+   * The returned error is iterable over its own `errors`, so `for..of`,
+   * spread and array destructuring all work on it directly. `instanceof
+   * AggregateError` and the `errors` property are unaffected.
    * @param {string} [message='Multiple errors occurred'] - Message for the aggregate error
-   * @returns {AggregateError|null} AggregateError or null if no errors
+   * @returns {(AggregateError & Iterable<Error>)|null} The aggregate, or null if no errors
    */
   toAggregateError(message = 'Multiple errors occurred') {
     if (!this.hasErrors()) return null
-    const aggregate = new AggregateError(this.#errors, message)
+    const aggregate = makeIterable(new AggregateError(this.#errors, message))
     if (this.#createdAt) {
       aggregate.cause = this.#createdAt
     }
@@ -103,35 +144,70 @@ export class ErrorBoundary {
   }
 
   /**
-   * Executes fn, traps error to boundary if thrown, returns Result
-   * Named after bash's `trap` command (set -euo pipefail)
+   * Executes fn, traps any error to the boundary, and returns a Result.
+   * Named after bash's `trap` (set -euo pipefail).
+   *
+   * Always returns a Promise, whether fn is sync, async, or a plain
+   * function returning a promise. A function that is sometimes sync and
+   * sometimes async is the oldest hazard in Node's history, so the sync
+   * door is a separate method rather than a second return shape.
    * @template T
-   * @param {() => T} fn - Function to execute
-   * @returns {{ ok: true, value: T } | { ok: false, error: Error }} Result
+   * @param {() => T|Promise<T>} fn - Function to execute
+   * @param {object} [options] - Options
+   * @param {T} [options.or] - Value for the first slot on failure, Go's zero value
+   * @returns {Promise<Result<T>>} Promise of a Result
    */
-  trap(fn) {
+  async trap(fn, options = {}) {
     try {
-      return { ok: true, value: fn() }
+      return ok(await fn())
     } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error))
+      const normalized = normalize(error)
       this.add(normalized)
-      return { ok: false, error: normalized }
+      return fail(normalized, options.or)
     }
   }
 
   /**
-   * Async version of trap - executes fn, traps error to boundary if thrown
+   * Synchronous trap. Executes fn, traps any error to the boundary, and
+   * returns a Result directly rather than a promise.
+   * @template T
+   * @param {() => T} fn - Function to execute
+   * @param {object} [options] - Options
+   * @param {T} [options.or] - Value for the first slot on failure, Go's zero value
+   * @returns {Result<T>} The Result
+   */
+  trapSync(fn, options = {}) {
+    try {
+      const value = fn()
+      // A thenable here means trapSync() was handed an async function. The
+      // sync door cannot await it, and returning ok:true with a pending
+      // promise in the value slot would let the real rejection escape as an
+      // unhandledRejection. Swallow the rejection so it cannot crash the
+      // process, and report the API misuse, which is the actual bug.
+      if (typeof (/** @type {{ then?: unknown }} */ (value).then) === 'function') {
+        Promise.resolve(value).catch(() => {})
+        throw new TypeError(
+          'trapSync() received a function that returned a promise. Use trap(), which awaits.'
+        )
+      }
+      return ok(value)
+    } catch (error) {
+      const normalized = normalize(error)
+      this.add(normalized)
+      return fail(normalized, options.or)
+    }
+  }
+
+  /**
+   * Alias of trap(), kept for v1 compatibility
+   * @deprecated Use trap(), which is async for every kind of function
    * @template T
    * @param {() => Promise<T>} fn - Async function to execute
-   * @returns {Promise<{ ok: true, value: T } | { ok: false, error: Error }>} Promise of Result
+   * @param {object} [options] - Options
+   * @param {T} [options.or] - Value for the first slot on failure
+   * @returns {Promise<Result<T>>} Promise of a Result
    */
-  async trapAsync(fn) {
-    try {
-      return { ok: true, value: await fn() }
-    } catch (error) {
-      const normalized = error instanceof Error ? error : new Error(String(error))
-      this.add(normalized)
-      return { ok: false, error: normalized }
-    }
+  trapAsync(fn, options) {
+    return this.trap(fn, options)
   }
 }

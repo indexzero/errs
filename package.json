@@ -12,6 +12,14 @@
       "types": "./src/boundary.d.ts",
       "import": "./src/boundary.js"
     },
+    "./group": {
+      "types": "./src/group.d.ts",
+      "import": "./src/group.js"
+    },
+    "./result": {
+      "types": "./src/result.d.ts",
+      "import": "./src/result.js"
+    },
     "./format": {
       "types": "./src/format.d.ts",
       "import": "./src/format.js"
@@ -22,21 +30,25 @@
   "types": "./src/errs.d.ts",
   "files": [
     "src",
-    "!src/**/*.test.js"
+    "!src/**/*.test.js",
+    "plugins"
   ],
   "scripts": {
     "test": "node --test test/**/*.test.js",
     "test:coverage": "node --test --experimental-test-coverage test/**/*.test.js",
     "test:watch": "node --test --watch test/**/*.test.js",
     "test:examples": "bash test/examples.test.sh",
-    "build:types": "tsc",
+    "check:dts": "tsc",
+    "check:js": "tsc -p tsconfig.check.json",
+    "check:types:gen": "tsc -p tsconfig.types-gen.json",
+    "check:types": "pnpm run check:types:gen && tsc -p tsconfig.types.json",
     "lint": "biome lint src test examples",
     "lint:fix": "biome lint --write src test examples",
     "format": "biome format --write src test examples",
     "format:check": "biome format src test examples",
-    "check": "biome check src test examples && pnpm run build:types",
+    "check": "biome check src test examples && pnpm run check:dts && pnpm run check:js && pnpm run check:types",
     "check:fix": "biome check --write src test examples",
-    "prepublishOnly": "pnpm run build:types"
+    "prepublishOnly": "pnpm run check && pnpm test"
   },
   "repository": {
     "type": "git",

@@ -1,18 +1,22 @@
 {
+  "//": "Typechecks the hand-written src/*.d.ts. It emits nothing and cannot: a sibling .d.ts exists for every .js, so TypeScript drops the .js from the program, which is also why checkJs here would be inert. The JSDoc is checked by tsconfig.check.json and the two halves are compared by tsconfig.types.json.",
   "compilerOptions": {
-    "checkJs": true,
-    "declaration": true,
-    "declarationMap": true,
-    "emitDeclarationOnly": true,
     "exactOptionalPropertyTypes": true,
-    "lib": ["es2024"],
+    "lib": [
+      "es2024"
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
+    "noEmit": true,
     "strict": true,
     "target": "es2024",
-    "skipLibCheck": true,
-    "outDir": "dist"
+    "skipLibCheck": true
   },
-  "include": ["src/**/*.js", "src/**/*.d.ts"],
-  "exclude": ["node_modules", "dist", "coverage"]
+  "include": [
+    "src/**/*.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "coverage"
+  ]
 }

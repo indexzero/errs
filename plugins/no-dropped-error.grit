@@ -1,0 +1,57 @@
+// no-dropped-error.grit: flag a Result whose error slot is thrown away.
+//
+// The one way the tuple is genuinely weaker than the throw it replaces is
+// that nothing makes you look at the error. Go leans on the compiler, where
+// an unused variable is a build failure. JavaScript has no equivalent, so
+// this plugin supplies the missing half.
+//
+// Biome's own noUnusedVariables already covers the case where the error IS
+// destructured and then never read:
+//
+//   const [res, err] = await errs.trap(fn)   // err unused -> noUnusedVariables
+//
+// What it cannot see is the slot being dropped outright, because then there
+// is no unused binding to complain about. That is this rule:
+//
+//   const [res] = await errs.trap(fn)        // error silently swallowed
+//
+// Suppress with a reason when you really do not want it, on the line above:
+//
+//   // biome-ignore lint/plugin: value is all we need here
+//
+// Scope: this matches `trap`, `trapSync`, `trapAsync` and group-rooted
+// `wait` calls, under `const`, `let` and `var`. A bare `wait()` or an
+// unrelated `mutex.wait()` is not an errs Result, so those are deliberately
+// left alone.
+//
+// Known gaps, all of them deliberate: widening the pattern to cover these
+// costs more in false positives than it buys.
+//
+//   const [v] = await errs['trap'](fn)   // computed member access
+//   const [v, ,] = await errs.trap(fn)   // elided second slot
+//   const { 0: v } = await errs.trap(fn) // index read as a property
+//   const [v] = await myThing.wait()     // receiver with no g/group prefix
+//
+// It also cannot see a Result bound whole and then read only for its value
+// (`const r = await trap(fn); use(r.value)`), which needs type information
+// rather than syntax.
+language js
+
+or {
+  `const [$only] = $init`,
+  `let [$only] = $init`,
+  `var [$only] = $init`
+} where {
+  $init <: contains or { `$callee($...)`, `await $callee($...)` },
+  $callee <: or {
+    r"(?:.*\.)?trap",
+    r"(?:.*\.)?trapSync",
+    r"(?:.*\.)?trapAsync",
+    r"(?:g|group|[A-Za-z_$]*[Gg]roup)\.wait"
+  },
+  register_diagnostic(
+    span = $only,
+    message = "The error slot of this Result is dropped. Destructure it as [value, error] and check it, or read `.value` to say that you meant to ignore it.",
+    severity = "error"
+  )
+}

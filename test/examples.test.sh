@@ -115,6 +115,38 @@ run_example_check_output "sync-uncaught-exception" "Caught exception"
 # handling-streams.js - handles stream errors gracefully
 run_example_check_output "handling-streams" "Stream error handled"
 
+# --- Go-shaped API: trap, group, Result ---
+
+# error-order.js - teaches value-first, error-last
+run_example_check_output "error-order" "value first, error last"
+
+# trap-basics.js - one Result read three ways
+run_example_check_output "trap-basics" "from plain fn"
+
+# trap-sync.js - sync door, the `or` fallback, loud forgotten await
+run_example_check_output "trap-sync" "forgotten await -> TypeError"
+
+# boundary-accumulate.js - collect every failure, report once
+run_example_check_output "boundary-accumulate" "parsed 2 of 4 rows"
+
+# group-basics.js - bounded concurrency, errors collected
+run_example_check_output "group-basics" "peak concurrency: 2"
+
+# group-cancel.js - first failure aborts the siblings
+run_example_check_output "group-cancel" "signal aborted: true"
+
+# group-timeout.js - external AbortSignal as a deadline
+run_example_check_output "group-timeout" "cut off by the deadline"
+
+# typed-errors.js - dispatching on the error slot
+run_example_check_output "typed-errors" "retry in 30s"
+
+# pipeline.js - sequential steps with named bindings
+run_example_check_output "pipeline" "plan: 'pro'"
+
+# migration.js - v1 and v2 reading the same Result
+run_example_check_output "migration" "v1 style"
+
 echo ""
 echo "========================"
 echo -e "Results: ${GREEN}$PASSED passed${NC}, ${RED}$FAILED failed${NC}"
