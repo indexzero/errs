@@ -109,6 +109,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `plugins/no-dropped-error.grit`, a Biome plugin flagging a Result whose error
   slot is dropped outright, which `noUnusedVariables` cannot see. Covers
   `const`, `let` and `var`, and is now shipped in the package.
+- `test/docs.test.js`, which asserts the documentation still describes this
+  repository: every referenced path and package script exists, no import list
+  has a duplicate specifier, and no prose states a test or example count.
+  Deliberately narrow, because parsing every fenced block as a module fires on
+  correct documentation that shows two spellings of one binding.
 - Three real type gates, replacing one that did nothing. `check:dts`
   typechecks the hand-written declarations, `check:js` typechecks the JSDoc in
   `src/*.js`, and `check:types` compares the two by deriving declarations from
